@@ -12,5 +12,5 @@ AND (
         FROM caughtPokemon CC
     )
 )
-GROUP BY T.name;
+GROUP BY T.name
 ORDER BY T.name;
