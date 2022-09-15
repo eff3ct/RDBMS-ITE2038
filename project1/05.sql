@@ -17,4 +17,4 @@ OR P.id IN (
         FROM Evolution
     )
 )
-ORDER BY P.id;
+ORDER BY P.name;
