@@ -1,4 +1,4 @@
-SELECT MAX(CNT.c), ROUND(MAX(CNT.c) / SUM(CNT.c), 2)
+SELECT MAX(CNT.c), ROUND(100 * MAX(CNT.c) / SUM(CNT.c), 2) AS PCTG
 FROM (
     SELECT COUNT(P.type) AS c
     FROM Pokemon P
