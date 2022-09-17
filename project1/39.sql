@@ -4,15 +4,29 @@ WHERE T.id = C1.owner_id
 AND T.id = C2.owner_id
 AND C1.pid <> C2.pid
 AND C2.pid IN (
-    SELECT before_id
-    FROM Evolution
-    WHERE C1.pid = after_id
-    OR C1.pid = before_id
+    SELECT E1.before_id
+    FROM Evolution E1, Evolution E2
+    WHERE E1.after_id = C1.pid
+    OR (
+        E1.after_id = E2.before_id
+        AND E2.after_id = C1.pid
+    )
+    OR (
+        E2.after_id = E1.before_id
+        AND E2.before_id = C1.pid
+    )
     UNION
-    SELECT after_id
-    FROM Evolution
-    WHERE C1.pid = after_id
-    OR C1.pid = before_id
+    SELECT E1.after_id
+    FROM Evolution E1, Evolution E2
+    WHERE E1.before_id = C1.pid
+    OR (
+        E1.before_id = E2.after_id
+        AND E2.before_id = C1.pid
+    )
+    OR (
+        E2.before_id = E1.after_id
+        AND E2.after_id = C1.pid
+    )
 )
 GROUP BY T.name, T.hometown
 ORDER BY T.name;
