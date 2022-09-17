@@ -3,9 +3,6 @@ FROM Pokemon P, Pokemon P1, Pokemon P2
 WHERE P.id IN (
     SELECT before_id
     FROM Evolution
-    EXCEPT
-    SELECT after_id
-    FROM Evolution
 )
 AND P1.id = (
     SELECT after_id
