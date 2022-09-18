@@ -1,10 +1,10 @@
 SELECT T.hometown, C.nickname
-FROM Trainer T, caughtPokemon C
+FROM Trainer T, CaughtPokemon C
 WHERE T.id = C.owner_id
 AND C.level = (
-    SELECT MAX(level)
-    FROM caughtPokemon
-    WHERE owner_id = T.id
+    SELECT MAX(CC.level)
+    FROM CaughtPokemon CC, Trainer TT
+    WHERE TT.id = CC.owner_id
+    AND TT.hometown = T.hometown
 )
-GROUP BY T.hometown, C.nickname
 ORDER BY T.hometown;
