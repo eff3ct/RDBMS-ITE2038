@@ -1,4 +1,4 @@
-SELECT T.name, C.nickname, MAX(C.level)
+SELECT T.name, C.nickname
 FROM Trainer T, caughtPokemon C
 WHERE T.id = C.owner_id
 AND T.id IN (
