@@ -13,6 +13,7 @@ namespace db_io {
         // Write a src to page(pagenum) of file(fd)
         void write_page(int fd, pagenum_t pagenum, const page_t* src) {
             pwrite(fd, src->data, PAGE_SIZE, pagenum * PAGE_SIZE);
+            sync();
         }
         // Set header page of file(fd), [0] = magic number(2022), [1] = next page number(next_free_page), [2] = number of pages(page_cnt)
         void set_header_page(int fd, pagenum_t next_free_page, pagenum_t page_cnt) {
@@ -34,6 +35,23 @@ namespace db_io {
                 memcpy(free_page.data, &next_free_page, sizeof(pagenum_t));
                 write_page(fd, i, &free_page);
             }
+        }
+        // Get next free page number of file(fd) from page(pagenum)
+        pagenum_t get_next_free_page(int fd, pagenum_t pagenum) {
+            pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
+            int idx = (pagenum == 0);
+            read_page(fd, pagenum, buf);
+            pagenum_t next_free_page = buf[idx];
+            free(buf);
+            return next_free_page;
+        }
+        // Get total page count from header page where file is (fd).
+        pagenum_t get_page_count(int fd) {
+            pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
+            read_page(fd, 0, buf);
+            pagenum_t page_cnt = buf[2];
+            free(buf);
+            return page_cnt;
         }
     }
     /* File I/O */
@@ -61,10 +79,10 @@ namespace db_io {
 
 // Open existing database file or create one if it doesn't exist
 int file_open_database_file(const char* pathname) {
-    int fd = open(pathname, O_RDWR);
+    int fd = open(pathname, O_RDWR | O_SYNC);
     // If file doesn't exist, create one
     if(fd < 0) {
-        fd = open(pathname, O_RDWR | O_CREAT, 0644);
+        fd = open(pathname, O_RDWR | O_CREAT | O_SYNC, 0644);
         pagenum_t page_cnt = INITIAL_DB_FILE_SIZE / PAGE_SIZE;
         db_io::page_io::set_header_page(fd, 1, page_cnt);
         db_io::page_io::make_free_pages(fd, 1, page_cnt - 1, page_cnt);
@@ -79,42 +97,32 @@ int file_open_database_file(const char* pathname) {
 
 // Allocate an on-disk page from the free page list
 pagenum_t file_alloc_page(int fd) {
-    pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
-    db_io::page_io::read_page(fd, 0, buf);
-
-    pagenum_t next_free_page = buf[1];
+    pagenum_t next_free_page = db_io::page_io::get_next_free_page(fd, 0);
 
     if(next_free_page == 0) {
         db_io::file_io::extend_file(fd);
-        db_io::page_io::read_page(fd, 0, buf);
-        next_free_page = buf[1];
+        next_free_page = db_io::page_io::get_next_free_page(fd, 0);
     }
 
     pagenum_t new_next_free_page;
-    db_io::page_io::read_page(fd, next_free_page, buf);
-    new_next_free_page = buf[0];
+    new_next_free_page = db_io::page_io::get_next_free_page(fd, next_free_page);
 
-    db_io::page_io::read_page(fd, 0, buf);
-    db_io::page_io::set_header_page(fd, new_next_free_page, buf[2]);
-
-    free(buf);
+    pagenum_t page_cnt = db_io::page_io::get_page_count(fd);
+    db_io::page_io::set_header_page(fd, new_next_free_page, page_cnt);
 
     return next_free_page;
 }
 
 // Free an on-disk page to the free page list
 void file_free_page(int fd, pagenum_t pagenum) {
-    pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
-    db_io::page_io::read_page(fd, 0, buf);
-
-    pagenum_t next_free_page = buf[1];
-    db_io::page_io::set_header_page(fd, pagenum, buf[2]);
+    pagenum_t next_free_page = db_io::page_io::get_next_free_page(fd, 0);
+    pagenum_t page_cnt = db_io::page_io::get_page_count(fd);
+    db_io::page_io::set_header_page(fd, pagenum, page_cnt);
 
     page_t freed_page;
     db_io::page_io::read_page(fd, pagenum, freed_page.data);
     memcpy(freed_page.data, &next_free_page, sizeof(pagenum_t));
     db_io::page_io::write_page(fd, pagenum, &freed_page);
-    free(buf);
 }
 
 // Read an on-disk page into the in-memory page structure(dest)
