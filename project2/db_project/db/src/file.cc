@@ -2,9 +2,9 @@
 
 std::vector<int> opened_files;
 
-/* Collection of I/O functions for db space manager */
+/* Collection of I/O functions for DB space manager */
 namespace db_io {
-    /* Page I/O */
+    /* Collection of 'Page I/O' functions */
     namespace page_io {
         // Read a page(pagenum) from file(fd) into buffer(dest)
         void read_page(int fd, pagenum_t pagenum, void* dest) {
@@ -15,7 +15,12 @@ namespace db_io {
             pwrite(fd, src->data, PAGE_SIZE, pagenum * PAGE_SIZE);
             sync();
         }
-        // Set header page of file(fd), [0] = magic number(2022), [1] = next page number(next_free_page), [2] = number of pages(page_cnt)
+        /* 
+        Set header page of file(fd), 
+        [0] = magic number(2022), 
+        [1] = next page number(next_free_page), 
+        [2] = number of pages(page_cnt)
+        */
         void set_header_page(int fd, pagenum_t next_free_page, pagenum_t page_cnt) {
             page_t header_page;
 
@@ -54,7 +59,7 @@ namespace db_io {
             return page_cnt;
         }
     }
-    /* File I/O */
+    /* Collection of 'File I/O' Functions */
     namespace file_io {
         // Check validity of the magic number of a current file(fd)
         bool is_valid_magic_number(int fd) {
@@ -64,15 +69,11 @@ namespace db_io {
             return magic_number == MAGIC_NUMBER;
             free(buf);
         }
-        // Doubling size of file(fd)
+        // Doubling size of the file(fd)
         void extend_file(int fd) {
-            pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
-            page_io::read_page(fd, 0, buf);
-            
-            pagenum_t num_pages = buf[2];
+            pagenum_t num_pages = page_io::get_page_count(fd);
             page_io::set_header_page(fd, num_pages, 2 * num_pages);
             page_io::make_free_pages(fd, num_pages, num_pages, 2 * num_pages);
-            free(buf);
         }
     }
 }
@@ -120,7 +121,6 @@ void file_free_page(int fd, pagenum_t pagenum) {
     db_io::page_io::set_header_page(fd, pagenum, page_cnt);
 
     page_t freed_page;
-    db_io::page_io::read_page(fd, pagenum, freed_page.data);
     memcpy(freed_page.data, &next_free_page, sizeof(pagenum_t));
     db_io::page_io::write_page(fd, pagenum, &freed_page);
 }
