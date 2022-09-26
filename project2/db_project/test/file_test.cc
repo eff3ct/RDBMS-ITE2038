@@ -93,6 +93,8 @@ TEST(PageTest, HandlesPageAllocation) {
         memcpy(&next_free_page, cur_page.data, sizeof(pagenum_t));
     }
 
+    file_close_database_file();
+
     remove(pathname.c_str());
 
     EXPECT_TRUE(is_freed_page_exist)
@@ -119,4 +121,58 @@ TEST(PageIOTest, CheckReadWriteOperation) {
     file_read_page(fd, allocated_page, &check_page);
     EXPECT_EQ(memcmp(a_page.data, check_page.data, PAGE_SIZE), 0)
         << "The written data does not match the read data";
+
+    file_close_database_file();
+
+    remove(pathname.c_str());
+}
+
+/*
+ * Advanced test: Page Write Test
+ * 1. Test page write by writing a page with a random content
+ */
+TEST(PageIOTest, AdvancedWritingTest) {
+    std::string pathname = "page_io_test.db";
+    remove(pathname.c_str());
+
+    int fd = file_open_database_file(pathname.c_str());
+
+    pagenum_t allocated_page = file_alloc_page(fd);
+
+    char random_data[PAGE_SIZE] = "Hello, World! asdfadsfbewbfhiebvifdnvksdfvk sd v ksadbjashdb";
+    page_t a_page;
+    memcpy(a_page.data, random_data, PAGE_SIZE);
+    file_write_page(fd, allocated_page, &a_page);
+
+    page_t check_page;
+    file_read_page(fd, allocated_page, &check_page);
+    EXPECT_EQ(memcmp(a_page.data, check_page.data, PAGE_SIZE), 0)
+        << "The written data does not match the read data";
+
+    file_close_database_file();
+
+    remove(pathname.c_str());
+}
+
+/* 
+ * Tests file doubling
+ * 1. Allocate pages until the file size doubles
+ * 2. Check if the file size is doubled
+ */
+TEST(FileDoublingTest, CheckFileDoubling) {
+    std::string pathname = "file_doubling_test.db";
+    remove(pathname.c_str());
+
+    int fd = file_open_database_file(pathname.c_str());
+
+    for(int i = 1; i <= 2560; ++i) file_alloc_page(fd);
+    file_alloc_page(fd);
+
+    off_t file_size = get_file_size(fd);
+    EXPECT_EQ(file_size, INITIAL_DB_FILE_SIZE * 2)
+        << "The file size does not match the requirement: " << file_size;
+
+    file_close_database_file();
+
+    remove(pathname.c_str());
 }

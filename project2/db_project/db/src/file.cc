@@ -66,8 +66,8 @@ namespace db_io {
             pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
             page_io::read_page(fd, 0, buf);
             pagenum_t magic_number = buf[0];
-            return magic_number == MAGIC_NUMBER;
             free(buf);
+            return magic_number == MAGIC_NUMBER;
         }
         // Doubling size of the file(fd)
         void extend_file(int fd) {
