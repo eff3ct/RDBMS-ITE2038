@@ -11,33 +11,25 @@
  * detect bugs in the future projects.
  ******************************************************************************/
 
-// Get size of a file(fd) using lseek syscall
-off_t get_file_size(int fd) {
-    off_t cur_position = lseek(fd, 0, SEEK_CUR);
-    off_t ret = lseek(fd, 0, SEEK_END);
-    lseek(fd, cur_position, SEEK_SET);
-    return ret;
-}
-
 /*
 * Tests file open/close APIs.
 * 1. Open a file and check the descriptor
 * 2. Check if the file's initial size is 10 MiB
 */
 TEST(FileInitTest, HandlesInitialization) {
-    int fd;                                 // file descriptor
+    int64_t table_id;                                 // file descriptor
     std::string pathname = "init_test.db";  // customize it to your test file
     remove(pathname.c_str());
 
     // Open a database file
-    fd = file_open_database_file(pathname.c_str());
+    table_id = file_open_table_file(pathname.c_str());
 
     // Check if the file is opened
-    ASSERT_TRUE(fd >= 0);  // change the condition to your design's behavior
+    ASSERT_TRUE(table_id >= 0);  // change the condition to your design's behavior
 
     // Check the size of the initial file
     page_t header_page;
-    file_read_page(fd, 0, &header_page);
+    file_read_page(table_id, 0, &header_page);
 
     pagenum_t cnt;
     memcpy(&cnt, header_page.data + sizeof(pagenum_t) * 2, sizeof(pagenum_t));
@@ -46,13 +38,13 @@ TEST(FileInitTest, HandlesInitialization) {
         << "The initial number of pages does not match the requirement: "
         << num_pages;
 
-    off_t file_size = get_file_size(fd);
-    EXPECT_EQ(file_size, INITIAL_DB_FILE_SIZE)
-        << "The initial file size does not match the requirement: " 
-        << file_size;
+    // off_t file_size = get_file_size(table_id);
+    // EXPECT_EQ(file_size, INITIAL_DB_FILE_SIZE)
+    //     << "The initial file size does not match the requirement: " 
+    //     << file_size;
 
     // Close all database files
-    file_close_database_file();
+    file_close_table_files();
 
     // Remove the db file
     remove(pathname.c_str());
@@ -67,16 +59,16 @@ TEST(PageTest, HandlesPageAllocation) {
     std::string pathname = "page_test.db";
     remove(pathname.c_str());
 
-    int fd = file_open_database_file(pathname.c_str());
+    int64_t table_id = file_open_table_file(pathname.c_str());
 
     pagenum_t allocated_page, freed_page;
 
     // Allocate the pages
-    allocated_page = file_alloc_page(fd);
-    freed_page = file_alloc_page(fd);
+    allocated_page = file_alloc_page(table_id);
+    freed_page = file_alloc_page(table_id);
 
     // Free one page
-    file_free_page(fd, freed_page);
+    file_free_page(table_id, freed_page);
 
     // Traverse the free page list and check the existence of the freed/allocated
     // pages. You might need to open a few APIs soley for testing.
@@ -84,16 +76,16 @@ TEST(PageTest, HandlesPageAllocation) {
 
     page_t cur_page;
     pagenum_t next_free_page;
-    file_read_page(fd, 0, &cur_page);
+    file_read_page(table_id, 0, &cur_page);
     memcpy(&next_free_page, cur_page.data + sizeof(pagenum_t), sizeof(pagenum_t));
     while(next_free_page != 0) {
         if(next_free_page == freed_page) is_freed_page_exist = true;
      
-        file_read_page(fd, next_free_page, &cur_page);
+        file_read_page(table_id, next_free_page, &cur_page);
         memcpy(&next_free_page, cur_page.data, sizeof(pagenum_t));
     }
 
-    file_close_database_file();
+    file_close_table_files();
 
     remove(pathname.c_str());
 
@@ -109,20 +101,20 @@ TEST(PageIOTest, CheckReadWriteOperation) {
     std::string pathname = "page_io_test.db";
     remove(pathname.c_str());
 
-    int fd = file_open_database_file(pathname.c_str());
+    int64_t table_id = file_open_table_file(pathname.c_str());
 
-    pagenum_t allocated_page = file_alloc_page(fd);
+    pagenum_t allocated_page = file_alloc_page(table_id);
 
     page_t a_page;
     memset(a_page.data, 'a', PAGE_SIZE);
-    file_write_page(fd, allocated_page, &a_page);
+    file_write_page(table_id, allocated_page, &a_page);
 
     page_t check_page;
-    file_read_page(fd, allocated_page, &check_page);
+    file_read_page(table_id, allocated_page, &check_page);
     EXPECT_EQ(memcmp(a_page.data, check_page.data, PAGE_SIZE), 0)
         << "The written data does not match the read data";
 
-    file_close_database_file();
+    file_close_table_files();
 
     remove(pathname.c_str());
 }
@@ -135,21 +127,21 @@ TEST(PageIOTest, AdvancedWritingTest) {
     std::string pathname = "page_io_test.db";
     remove(pathname.c_str());
 
-    int fd = file_open_database_file(pathname.c_str());
+    int64_t table_id = file_open_table_file(pathname.c_str());
 
-    pagenum_t allocated_page = file_alloc_page(fd);
+    pagenum_t allocated_page = file_alloc_page(table_id);
 
     char random_data[PAGE_SIZE] = "Hello, World! asdfadsfbewbfhiebvifdnvksdfvk sd v ksadbjashdb";
     page_t a_page;
     memcpy(a_page.data, random_data, PAGE_SIZE);
-    file_write_page(fd, allocated_page, &a_page);
+    file_write_page(table_id, allocated_page, &a_page);
 
     page_t check_page;
-    file_read_page(fd, allocated_page, &check_page);
+    file_read_page(table_id, allocated_page, &check_page);
     EXPECT_EQ(memcmp(a_page.data, check_page.data, PAGE_SIZE), 0)
         << "The written data does not match the read data";
 
-    file_close_database_file();
+    file_close_table_files();
 
     remove(pathname.c_str());
 }
@@ -163,16 +155,17 @@ TEST(FileDoublingTest, CheckFileDoubling) {
     std::string pathname = "file_doubling_test.db";
     remove(pathname.c_str());
 
-    int fd = file_open_database_file(pathname.c_str());
+    int64_t table_id = file_open_table_file(pathname.c_str());
 
-    for(int i = 1; i <= 2560; ++i) file_alloc_page(fd);
-    file_alloc_page(fd);
+    for(int i = 1; i <= 2560; ++i) file_alloc_page(table_id);
+    file_alloc_page(table_id);
 
-    off_t file_size = get_file_size(fd);
+    int fd = table_manager.get_fd(table_id);
+    off_t file_size = file_io::get_file_size(fd);
     EXPECT_EQ(file_size, INITIAL_DB_FILE_SIZE * 2)
         << "The file size does not match the requirement: " << file_size;
 
-    file_close_database_file();
+    file_close_table_files();
 
     remove(pathname.c_str());
 }
