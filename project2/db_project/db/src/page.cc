@@ -26,7 +26,15 @@ uint16_t page_io::get_key_count(const page_t* page) {
 }
 // Set key count of page
 void page_io::set_key_count(page_t* page, uint16_t key_count) {
-    memcpy(page->data + sizeof(pagenum_t) + sizeof(uint16_t), &key_count, sizeof(uint16_t));
+    memcpy(page->data + KEY_COUNT_OFFSET, &key_count, sizeof(uint16_t));
+}
+pagenum_t page_io::get_parent_page(const page_t* page) {
+    pagenum_t parent_page;
+    memcpy(&parent_page, page->data, sizeof(pagenum_t));
+    return parent_page;
+}
+void page_io::set_parent_page(page_t* page, pagenum_t parent_page) {
+    memcpy(page->data, &parent_page, sizeof(pagenum_t));
 }
 
 /* HEADER PAGE IO */
@@ -58,16 +66,45 @@ pagenum_t page_io::header::get_page_count(const page_t* header_page) {
     return page_cnt;
 }
 
+/* INTERNAL PAGE IO */
+void page_io::internal::set_new_internal_page(page_t* internal_page) {
+    pagenum_t parent_page = 0;
+    int16_t is_leaf = 0;
+    uint16_t key_count = 0;
+
+    memcpy(internal_page->data, &parent_page, sizeof(pagenum_t));
+    memcpy(internal_page->data + sizeof(pagenum_t), &is_leaf, sizeof(int16_t));
+    memcpy(internal_page->data + sizeof(pagenum_t) + sizeof(int16_t), &key_count, sizeof(uint16_t));
+}
+
+pagenum_t page_io::internal::get_key(const page_t* internal_page, pagenum_t idx) {
+    pagenum_t key;
+    memcpy(&key, internal_page->data + INTERNAL_PAGE_OFFSET + sizeof(pagenum_t) + idx * 2 * sizeof(pagenum_t), sizeof(pagenum_t));
+    return key;
+}
+pagenum_t page_io::internal::get_child(const page_t* internal_page, pagenum_t idx) {
+    pagenum_t child;
+    memcpy(&child, internal_page->data + INTERNAL_PAGE_OFFSET + idx * 2 * sizeof(pagenum_t), sizeof(pagenum_t));
+    return child;
+}
+void page_io::internal::set_key(page_t* internal_page, pagenum_t idx, pagenum_t key) {
+    memcpy(internal_page->data + INTERNAL_PAGE_OFFSET + sizeof(pagenum_t) + idx * 2 * sizeof(pagenum_t), &key, sizeof(pagenum_t));
+}
+void page_io::internal::set_child(page_t* internal_page, pagenum_t idx, pagenum_t child) {
+    memcpy(internal_page->data + INTERNAL_PAGE_OFFSET + idx * 2 * sizeof(pagenum_t), &child, sizeof(pagenum_t));
+}
+
 /* LEAF PAGE IO */
 // Set a new leaf page
-void page_io::leaf::set_new_leaf_page(page_t* leaf_page, pagenum_t parent_pagenum) {
+void page_io::leaf::set_new_leaf_page(page_t* leaf_page) {
     int16_t is_leaf = 1;
     uint16_t key_count = 0;
+    pagenum_t parent_pagenum = 0;
     memcpy(leaf_page->data, &parent_pagenum, sizeof(pagenum_t));
     memcpy(leaf_page->data + sizeof(pagenum_t), &is_leaf, sizeof(int16_t));
     memcpy(leaf_page->data + sizeof(pagenum_t) + sizeof(uint16_t), &key_count, sizeof(uint16_t));
     
-    pagenum_t free_space = PAGE_SIZE - 128;
+    pagenum_t free_space = INITIAL_FREE_SPACE;
     pagenum_t right_sibling = 0;
     memcpy(leaf_page->data + LEAF_PAGE_OFFSET, &free_space, sizeof(pagenum_t));
     memcpy(leaf_page->data + LEAF_PAGE_OFFSET + sizeof(pagenum_t), &right_sibling, sizeof(pagenum_t));
@@ -80,7 +117,7 @@ void page_io::leaf::update_free_space(page_t* leaf_page, slotnum_t size) {
 }
 // Set slot to leaf page.
 void page_io::leaf::set_slot(page_t* leaf_page, slotnum_t slot_num, const slot_t* slot) {
-    memcpy(leaf_page->data + LEAF_PAGE_OFFSET + 2 * sizeof(pagenum_t) + slot_num * sizeof(slot_t), slot, sizeof(slot_t));
+    memcpy(leaf_page->data + LEAF_PAGE_SLOT_OFFSET + slot_num * SLOT_SIZE, slot, SLOT_SIZE);
 }
 // Set record to leaf page.
 void page_io::leaf::set_record(page_t* leaf_page, slotnum_t offset, const char* value, int16_t size) {
@@ -92,6 +129,12 @@ pagenum_t page_io::leaf::get_free_space(const page_t* leaf_page) {
     memcpy(&amount_of_free_space, leaf_page->data + LEAF_PAGE_OFFSET, sizeof(pagenum_t));
     return amount_of_free_space;
 }
+void set_free_space(page_t* leaf_page, pagenum_t free_space) {
+    memcpy(leaf_page->data + LEAF_PAGE_OFFSET, &free_space, sizeof(pagenum_t));
+}
+void set_right_sibling(page_t* leaf_page, pagenum_t right_sibling) {
+    memcpy(leaf_page->data + LEAF_PAGE_OFFSET + sizeof(pagenum_t), &right_sibling, sizeof(pagenum_t));
+}
 // Get right sibling page number.
 pagenum_t page_io::leaf::get_right_sibling(const page_t* leaf_page) {
     pagenum_t right_sibling_page;
@@ -101,19 +144,52 @@ pagenum_t page_io::leaf::get_right_sibling(const page_t* leaf_page) {
 // Get key from (slot_num) slot.
 pagenum_t page_io::leaf::get_key(const page_t* leaf_page, slotnum_t slot_num) {
     pagenum_t key;
-    memcpy(&key, leaf_page->data + LEAF_PAGE_OFFSET + SLOT_SIZE * slot_num, sizeof(pagenum_t));
+    memcpy(&key, leaf_page->data + LEAF_PAGE_SLOT_OFFSET + SLOT_SIZE * slot_num, sizeof(pagenum_t));
     return key;
+}
+void get_record(const page_t* leaf_page, slotnum_t offset, char* value, int16_t size) {
+    memcpy(value, leaf_page->data + offset, size);
+}
+slotnum_t page_io::leaf::get_record_size(const page_t* leaf_page, slotnum_t slot_num) {
+    slotnum_t record_size;
+    memcpy(&record_size, leaf_page->data + LEAF_PAGE_SLOT_OFFSET + SLOT_SIZE * slot_num + sizeof(pagenum_t), sizeof(slotnum_t));
+    return record_size;
 }
 slotnum_t page_io::leaf::get_offset(const page_t* leaf_page, slotnum_t slot_num) {
     slotnum_t offset;
-    memcpy(&offset, leaf_page->data + LEAF_PAGE_OFFSET + SLOT_SIZE * slot_num + sizeof(pagenum_t) + sizeof(slotnum_t), sizeof(slotnum_t));
+    memcpy(&offset, leaf_page->data + LEAF_PAGE_SLOT_OFFSET + SLOT_SIZE * slot_num + sizeof(pagenum_t) + sizeof(slotnum_t), sizeof(slotnum_t));
     return offset;
 }
 
 /* SLOT IO */
 // Get slot from (slot_num) slot.
 void slot_io::read_slot(const page_t* page, slotnum_t slot_num, slot_t* slot) {
-    memcpy(slot, page->data + LEAF_PAGE_OFFSET + SLOT_SIZE * slot_num, SLOT_SIZE);
+    memcpy(slot, page->data + LEAF_PAGE_SLOT_OFFSET + SLOT_SIZE * slot_num, SLOT_SIZE);
 }
+// Set a new slot with data.
+void slot_io::set_new_slot(slot_t* slot, int64_t key, slotnum_t size, slotnum_t offset) {
+    memcpy(slot, &key, sizeof(int64_t));
+    memcpy(slot + sizeof(int64_t), &size, sizeof(slotnum_t));
+    memcpy(slot + sizeof(int64_t) + sizeof(slotnum_t), &offset, sizeof(slotnum_t));
+}
+void set_offset(slot_t* slot, slotnum_t offset) {
+    memcpy(slot + sizeof(int64_t) + sizeof(slotnum_t), &offset, sizeof(slotnum_t));
+}
+slotnum_t slot_io::get_offset(const slot_t* slot) {
+    slotnum_t offset;
+    memcpy(&offset, slot + sizeof(int64_t) + sizeof(slotnum_t), sizeof(slotnum_t));
+    return offset;
+}
+slotnum_t slot_io::get_record_size(const slot_t* slot) {
+    slotnum_t size;
+    memcpy(&size, slot + sizeof(int64_t), sizeof(slotnum_t));
+    return size;
+}
+pagenum_t slot_io::get_key(const slot_t* slot) {
+    pagenum_t key;
+    memcpy(&key, slot, sizeof(pagenum_t));
+    return key;
+}
+
 
 

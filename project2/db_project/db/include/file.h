@@ -3,6 +3,8 @@
 
 #include <vector>
 #include <map>
+#include <utility>
+#include <string>
 
 #include "page.h"
 
@@ -14,7 +16,6 @@ namespace file_io {
     void write_page(int fd, pagenum_t pagenum, const page_t* src);
     void make_free_pages(int fd, pagenum_t start_pagenum, pagenum_t new_page_cnt, pagenum_t total_cnt);
 }
-
 
 // Manger for opened tables.
 class TableManager {

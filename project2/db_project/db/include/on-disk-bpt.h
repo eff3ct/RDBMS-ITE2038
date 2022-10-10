@@ -6,11 +6,11 @@
 /* Util Functions */
 slotnum_t cut_leaf(page_t* leaf);
 slotnum_t cut_internal();
-pagenum_t get_left_index(pagenum_t parent, pagenum_t left);
+pagenum_t get_left_idx(int64_t table_id, pagenum_t parent, pagenum_t left);
 
 /* Find */
-pagenum_t find_leaf(int64_t table_id, int64_t key);
-bool find(int64_t table_id, int64_t key);
+pagenum_t find_leaf(int64_t table_id, pagenum_t root, int64_t key);
+std::pair<pagenum_t, slotnum_t> find(int64_t table_id, pagenum_t root, int64_t key);
 
 /* Insertion */
 pagenum_t make_internal_node(int64_t table_id);
