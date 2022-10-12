@@ -1,4 +1,5 @@
 #include "on-disk-bpt.h"
+#include <iostream>
 
 /* TODO */
 // 1. Fix util functions to reference.
@@ -8,7 +9,7 @@ slotnum_t cut_leaf(std::vector<slot_t>& slots) {
     slotnum_t cut = 0;
     slotnum_t size = 0;
     for(slotnum_t i = 0; i < num_slots; i++) {
-        size += slot_io::get_record_size(&slots[i]);
+        size += slot_io::get_record_size(&slots[i]) + SLOT_SIZE;
         if(size >= (PAGE_SIZE - PAGE_HEADER_SIZE) / 2) {
             cut = i;
             break;
@@ -112,7 +113,7 @@ pagenum_t insert_into_leaf(int64_t table_id, pagenum_t leaf, int64_t key, const 
 
     page_t leaf_page;
     file_read_page(table_id, leaf, &leaf_page);
-    uint16_t num_keys = page_io::get_key_count(&leaf_page);
+    uint32_t num_keys = page_io::get_key_count(&leaf_page);
 
     while(insertion_point < num_keys
     && page_io::leaf::get_key(&leaf_page, insertion_point) < key) {
@@ -133,7 +134,7 @@ pagenum_t insert_into_leaf(int64_t table_id, pagenum_t leaf, int64_t key, const 
     slot_io::set_new_slot(&new_slot, key, size, offset);
     page_io::leaf::set_slot(&leaf_page, insertion_point, &new_slot);
     page_io::leaf::set_record(&leaf_page, offset, value, size);
-    page_io::leaf::update_free_space(&leaf_page, size);
+    page_io::leaf::update_free_space(&leaf_page, size + SLOT_SIZE);
     page_io::set_key_count(&leaf_page, num_keys + 1);
     file_write_page(table_id, leaf, &leaf_page);
 
@@ -143,6 +144,12 @@ pagenum_t insert_into_leaf(int64_t table_id, pagenum_t leaf, int64_t key, const 
 /* Start a new tree */
 pagenum_t start_new_tree(int64_t table_id, int64_t key, const char* value, uint16_t size) {
     pagenum_t root = make_leaf(table_id);
+
+    page_t header;
+    file_read_page(table_id, 0, &header);
+    page_io::header::set_root_page(&header, root);
+    file_write_page(table_id, 0, &header);
+
     slotnum_t offset = (slotnum_t)(PAGE_SIZE - size);
     
     page_t root_page;
@@ -152,8 +159,8 @@ pagenum_t start_new_tree(int64_t table_id, int64_t key, const char* value, uint1
     slot_io::set_new_slot(&slot, key, (slotnum_t)size, offset);
     page_io::leaf::set_slot(&root_page, 0, &slot);
     page_io::leaf::set_record(&root_page, offset, value, size);
-    page_io::leaf::update_free_space(&root_page, size);
-    page_io::leaf::set_key_count(&root_page, 1);
+    page_io::leaf::update_free_space(&root_page, size + SLOT_SIZE);
+    page_io::set_key_count(&root_page, 1);
 
     file_write_page(table_id, root, &root_page);
 
@@ -165,7 +172,7 @@ pagenum_t insert_into_leaf_after_splitting(int64_t table_id, pagenum_t root, pag
 
     page_t leaf_page;
     file_read_page(table_id, leaf, &leaf_page);
-    uint16_t num_keys = page_io::get_key_count(&leaf_page);
+    uint32_t num_keys = page_io::get_key_count(&leaf_page);
 
     while(insertion_point < num_keys
     && page_io::leaf::get_key(&leaf_page, insertion_point) < key) {
@@ -176,20 +183,18 @@ pagenum_t insert_into_leaf_after_splitting(int64_t table_id, pagenum_t root, pag
     std::vector<std::string> temp_records(num_keys + 1);
     for(slotnum_t i = 0, j = 0; i < num_keys; ++i, ++j) {
         if(j == insertion_point) j++;
-        slot_t temp_slot;
+        slot_t& temp_slot = temp_slots[j];
         slot_io::read_slot(&leaf_page, i, &temp_slot);
 
         slotnum_t offset = slot_io::get_offset(&temp_slot);
-        slotnum_t record_size = slot_io::get_record_size(&temp_slot);
+        uint16_t record_size = slot_io::get_record_size(&temp_slot);
         char* temp_record = new char[record_size];
         page_io::leaf::get_record(&leaf_page, offset, temp_record, record_size);
         temp_records[j] = std::string(temp_record, record_size);
-        temp_slots[j] = temp_slot;
         delete[] temp_record;
     }
-    slot_t new_slot;
+    slot_t& new_slot = temp_slots[insertion_point];
     slot_io::set_new_slot(&new_slot, key, size, (slotnum_t)(PAGE_SIZE - size));
-    temp_slots[insertion_point] = new_slot;
     temp_records[insertion_point] = std::string(value, size);
 
     slotnum_t split = cut_leaf(temp_slots);
@@ -197,15 +202,15 @@ pagenum_t insert_into_leaf_after_splitting(int64_t table_id, pagenum_t root, pag
     slotnum_t offset = PAGE_SIZE;
     page_io::leaf::set_free_space(&leaf_page, INITIAL_FREE_SPACE);
     for(slotnum_t i = 0; i < split; ++i) {
-        slot_t temp_slot = temp_slots[i];
-        slotnum_t record_size = slot_io::get_record_size(&temp_slot);
+        slot_t& temp_slot = temp_slots[i];
+        uint16_t record_size = slot_io::get_record_size(&temp_slot);
         offset -= record_size;
         slot_io::set_offset(&temp_slot, offset);
         page_io::leaf::set_slot(&leaf_page, i, &temp_slot);
         page_io::leaf::set_record(&leaf_page, offset, temp_records[i].c_str(), record_size);
-        page_io::leaf::update_free_space(&leaf_page, record_size);
+        page_io::leaf::update_free_space(&leaf_page, record_size + SLOT_SIZE);
     }
-    page_io::leaf::set_key_count(&leaf_page, split);
+    page_io::set_key_count(&leaf_page, split);
 
     pagenum_t new_leaf = make_leaf(table_id);
     page_t new_leaf_page;
@@ -213,20 +218,24 @@ pagenum_t insert_into_leaf_after_splitting(int64_t table_id, pagenum_t root, pag
 
     offset = PAGE_SIZE;
     for(slotnum_t i = split, j = 0; i < num_keys + 1; ++i, ++j) {
-        slot_t temp_slot = temp_slots[i];
-        slotnum_t record_size = slot_io::get_record_size(&temp_slot);
+        slot_t& temp_slot = temp_slots[i];
+        uint16_t record_size = slot_io::get_record_size(&temp_slot);
         offset -= record_size;
         slot_io::set_offset(&temp_slot, offset);
         page_io::leaf::set_slot(&new_leaf_page, j, &temp_slot);
         page_io::leaf::set_record(&new_leaf_page, offset, temp_records[i].c_str(), record_size);
-        page_io::leaf::update_free_space(&new_leaf_page, record_size);
+        page_io::leaf::update_free_space(&new_leaf_page, record_size + SLOT_SIZE);
     }
-    page_io::leaf::set_key_count(&new_leaf_page, num_keys + 1 - split);
+    page_io::set_key_count(&new_leaf_page, num_keys + 1 - split);
 
     /* Set right sibling */
     pagenum_t right_sibling = page_io::leaf::get_right_sibling(&leaf_page);
     page_io::leaf::set_right_sibling(&leaf_page, new_leaf);
     page_io::leaf::set_right_sibling(&new_leaf_page, right_sibling);
+
+    /* Set parent */
+    pagenum_t parent = page_io::get_parent_page(&leaf_page);
+    page_io::set_parent_page(&new_leaf_page, parent);
 
     /* Write pages */
     file_write_page(table_id, leaf, &leaf_page);
@@ -240,7 +249,7 @@ pagenum_t insert_into_leaf_after_splitting(int64_t table_id, pagenum_t root, pag
 pagenum_t insert_into_node_after_splitting(int64_t table_id, pagenum_t root, pagenum_t old_node, pagenum_t left_index, int64_t key, pagenum_t right) {
     page_t old_node_page;
     file_read_page(table_id, old_node, &old_node_page);
-    uint16_t num_keys = page_io::get_key_count(&old_node_page);
+    uint32_t num_keys = page_io::get_key_count(&old_node_page);
 
     std::vector<pagenum_t> temp_keys(num_keys + 1);
     std::vector<pagenum_t> temp_childs(num_keys + 2);
@@ -297,6 +306,37 @@ pagenum_t insert_into_node_after_splitting(int64_t table_id, pagenum_t root, pag
     return insert_into_parent(table_id, root, old_node, prime_key, new_node);
 }
 
+pagenum_t insert_into_new_root(int64_t table_id, pagenum_t left, int64_t key, pagenum_t right) {
+    pagenum_t root = make_internal_node(table_id);
+
+    page_t header_page;
+    file_read_page(table_id, 0, &header_page);
+    page_io::header::set_root_page(&header_page, root);
+    file_write_page(table_id, 0, &header_page);
+
+    page_t root_page;
+    file_read_page(table_id, root, &root_page);
+
+    page_io::internal::set_key(&root_page, 0, key);
+    page_io::internal::set_child(&root_page, 0, left);
+    page_io::internal::set_child(&root_page, 1, right);
+    page_io::set_key_count(&root_page, 1);
+
+    page_t left_page;
+    file_read_page(table_id, left, &left_page);
+    page_io::set_parent_page(&left_page, root);
+
+    page_t right_page;
+    file_read_page(table_id, right, &right_page);
+    page_io::set_parent_page(&right_page, root);
+
+    file_write_page(table_id, root, &root_page);
+    file_write_page(table_id, left, &left_page);
+    file_write_page(table_id, right, &right_page);
+
+    return root;
+}
+
 pagenum_t insert_into_parent(int64_t table_id, pagenum_t root, pagenum_t left, int64_t key, pagenum_t right) {
     page_t left_page;
     file_read_page(table_id, left, &left_page);
@@ -310,7 +350,7 @@ pagenum_t insert_into_parent(int64_t table_id, pagenum_t root, pagenum_t left, i
     pagenum_t left_index = get_left_idx(table_id, parent, left);
     page_t parent_page;
     file_read_page(table_id, parent, &parent_page);
-    uint16_t num_keys = page_io::get_key_count(&parent_page);
+    uint32_t num_keys = page_io::get_key_count(&parent_page);
 
     if(num_keys < INTERNAL_ORDER - 1) {
         return insert_into_node(table_id, root, parent, left_index, key, right);
@@ -322,7 +362,7 @@ pagenum_t insert_into_parent(int64_t table_id, pagenum_t root, pagenum_t left, i
 pagenum_t insert_into_node(int64_t table_id, pagenum_t root, pagenum_t node, slotnum_t left_idx, int64_t key, pagenum_t right) {
     page_t node_page;
     file_read_page(table_id, node, &node_page);
-    uint16_t num_keys = page_io::get_key_count(&node_page);
+    uint32_t num_keys = page_io::get_key_count(&node_page);
 
     for(pagenum_t i = num_keys; i > left_idx; --i) {
         pagenum_t temp_child = page_io::internal::get_child(&node_page, i);
@@ -334,6 +374,8 @@ pagenum_t insert_into_node(int64_t table_id, pagenum_t root, pagenum_t node, slo
     page_io::internal::set_child(&node_page, left_idx + 1, right);
     page_io::internal::set_key(&node_page, left_idx, key);
     page_io::set_key_count(&node_page, num_keys + 1);
+
+    file_write_page(table_id, node, &node_page);
 
     return root;
 }
@@ -367,10 +409,73 @@ pagenum_t insert(int64_t table_id, pagenum_t root, int64_t key, const char* valu
     page_t leaf_page;
     file_read_page(table_id, leaf, &leaf_page);
     pagenum_t free_space = page_io::leaf::get_free_space(&leaf_page);
+
     if(free_space >= size + SLOT_SIZE) {
         return insert_into_leaf(table_id, leaf, key, value, size);
     }
 
     /* Case : leaf must be split. */
     return insert_into_leaf_after_splitting(table_id, root, leaf, key, value, size);
+}
+
+/* * * * * * * * * * * * * * DELETE * * * * * * * * * * * * * */ 
+// TODO 
+
+pagenum_t adjust_root(int64_t table_id, pagenum_t root) {
+    pagenum_t new_root;
+
+    page_t root_page;
+    file_read_page(table_id, root, &root_page);
+    uint32_t num_keys = page_io::get_key_count(&root_page);
+
+    if(num_keys > 0) return root;
+    
+    bool is_leaf = page_io::is_leaf(&root_page);
+    if(!is_leaf) {
+        new_root = page_io::internal::get_child(&root_page, 0);
+        page_t new_root_page;
+        file_read_page(table_id, new_root, &new_root_page);
+        page_io::set_parent_page(&new_root_page, 0);
+        file_write_page(table_id, new_root, &new_root_page);
+    }
+    else new_root = 0;
+
+    file_free_page(table_id, root);
+    
+    return new_root;
+}
+
+pagenum_t remove_entry_from_node(int64_t table_id, int64_t key, pagenum_t node) {
+
+}
+
+pagenum_t delete_entry(int64_t table_id, pagenum_t root, pagenum_t node, int64_t key) {
+    node = remove_entry_from_node(table_id, node, key);
+
+    /* Case : Deletion from the root */
+    if(node == root) return adjust_root(table_id, root);
+
+    /* Case : Deletion from the internal node */
+    // Do something
+
+    /* Case : Deletion from the leaf node */
+    // Do something
+
+    /* Case : Merge */
+    // Do something
+
+    /* Case : Redistribute */
+    // Do something
+}
+
+/* Master deletion function */
+pagenum_t master_delete(int64_t table_id, pagenum_t root, int64_t key) {
+    pagenum_t key_leaf = find_leaf(table_id, root, key);
+    auto location_pair = find(table_id, root, key);
+
+    if(location_pair != std::pair<pagenum_t, slotnum_t>({0, 0})) {
+        root = delete_entry(table_id, root, key_leaf, key);
+    }
+
+    return root;
 }

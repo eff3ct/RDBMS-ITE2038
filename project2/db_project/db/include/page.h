@@ -24,7 +24,7 @@
 #define INITIAL_FREE_SPACE (3968)
 
 typedef uint64_t pagenum_t;
-typedef uint8_t slotnum_t;
+typedef uint16_t slotnum_t;
 
 struct page_t {
     char data[PAGE_SIZE];
@@ -37,13 +37,14 @@ struct slot_t {
 namespace page_io {
     pagenum_t get_next_free_page(const page_t* page, pagenum_t pagenum);
     bool is_leaf(const page_t* page);
-    uint16_t get_key_count(const page_t* page);
-    void set_key_count(page_t* page, uint16_t key_count);
+    uint32_t get_key_count(const page_t* page);
+    void set_key_count(page_t* page, uint32_t key_count);
     pagenum_t get_parent_page(const page_t* page);
     void set_parent_page(page_t* page, pagenum_t parent_page);
 
     namespace header {
         void set_header_page(page_t* header_page, pagenum_t next_free_page, pagenum_t page_cnt, pagenum_t root_page);
+        void set_root_page(page_t* header_page, pagenum_t root_page);
         pagenum_t get_root_page(const page_t* header_page);
         pagenum_t get_page_count(const page_t* header_page);
     }
@@ -56,12 +57,11 @@ namespace page_io {
     }
     namespace leaf {
         void set_new_leaf_page(page_t* leaf_page);
-        void set_key_count(page_t* leaf_page, uint16_t key_count);
         void update_free_space(page_t* leaf_page, slotnum_t size);
         void set_free_space(page_t* leaf_page, pagenum_t free_space);
         void set_slot(page_t* leaf_page, slotnum_t slot_num, const slot_t* slot);
-        void set_record(page_t* leaf_page, slotnum_t offset, const char* value, int16_t size);
-        void get_record(const page_t* leaf_page, slotnum_t offset, char* value, int16_t size);
+        void set_record(page_t* leaf_page, slotnum_t offset, const char* value, uint16_t size);
+        void get_record(const page_t* leaf_page, slotnum_t offset, char* value, uint16_t size);
         void set_right_sibling(page_t* leaf_page, pagenum_t right_sibling);
         pagenum_t get_free_space(const page_t* leaf_page);
         pagenum_t get_right_sibling(const page_t* leaf_page);

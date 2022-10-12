@@ -31,7 +31,7 @@ int db_delete(int64_t table_id, int64_t key);
 * If success, return 0 else return non-zero value.
 */
 int db_scan(int64_t table_id, int64_t begin_key, int64_t end_key,
-            std::vector<int64_t>* keys, std::vector<char*>* values, std::vector<uint16_t>* val_sizes);
+std::vector<int64_t>* keys, std::vector<char*>* values, std::vector<uint16_t>* val_sizes);
 
 /* Initialize DBMS.
 * If success, return 0 else return non-zero value.

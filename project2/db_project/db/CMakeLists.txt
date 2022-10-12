@@ -4,6 +4,8 @@ set(DB_SOURCES
   ${DB_SOURCE_DIR}/bpt.cc
   ${DB_SOURCE_DIR}/file.cc
   ${DB_SOURCE_DIR}/page.cc
+  ${DB_SOURCE_DIR}/db.cc
+  ${DB_SOURCE_DIR}/on-disk-bpt.cc
   # Add your sources here
   # ${DB_SOURCE_DIR}/foo/bar/your_source.cc
   )
@@ -14,6 +16,8 @@ set(DB_HEADERS
   ${DB_HEADER_DIR}/bpt.h
   ${DB_HEADER_DIR}/file.h
   ${DB_HEADER_DIR}/page.h
+  ${DB_HEADER_DIR}/db.h
+  ${DB_HEADER_DIR}/on-disk-bpt.h
   # Add your headers here
   # ${DB_HEADER_DIR}/foo/bar/your_header.h
   )
