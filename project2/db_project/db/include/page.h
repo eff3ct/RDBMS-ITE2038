@@ -25,7 +25,7 @@
 #define THRESHOLD (2500)
 
 typedef uint64_t pagenum_t;
-typedef uint16_t slotnum_t;
+typedef int16_t slotnum_t;
 
 struct page_t {
     char data[PAGE_SIZE];

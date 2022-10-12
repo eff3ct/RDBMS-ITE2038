@@ -48,7 +48,13 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t* val_size) {
 }
 
 int db_delete(int64_t table_id, int64_t key) {
+    page_t header;
+    file_read_page(table_id, 0, &header);
+    pagenum_t root = page_io::header::get_root_page(&header);
 
+    master_delete(table_id, root, key);
+
+    return 0;
 }
 
 int db_scan(int64_t table_id, int64_t begin_key, int64_t end_key,
@@ -57,9 +63,10 @@ std::vector<int64_t>* keys, std::vector<char*>* values, std::vector<uint16_t>* v
 }
 
 int init_db() {
-
+    return 0;
 }
 
 int shutdown_db() {
     file_close_table_files();
+    return 0;
 }

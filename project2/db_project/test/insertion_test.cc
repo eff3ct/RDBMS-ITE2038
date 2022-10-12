@@ -3,71 +3,196 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <random>
+#include <algorithm>
 
-TEST(InsertionTest, HandlesInsertion) {
-    int64_t table_id;
-    std::string pathname = "insertion_test.db";
-    std::remove(pathname.c_str());
+// std::string get_random_string(int length) {
+//     std::string ret;
 
-    // Open a database file
-    table_id = open_table(pathname.c_str());
+//     std::mt19937 engine(time(NULL));
+//     std::uniform_int_distribution<char> dis('a', 'z');
+//     auto gen = bind(dis, engine);
 
-    // Check if the file is opened
-    ASSERT_TRUE(table_id >= 0);
+//     for(int i = 0; i < length; ++i) {
+//         ret += gen();
+//     }
 
-    const char* value = "value9918293164231";
-    uint16_t size = strlen(value);
-    int rec = 5000000;
-    // Insert 100 records
-    for(int i = 0; i < rec; ++i) {
-        int flag = db_insert(table_id, i, value, size);
-        EXPECT_EQ(flag, 0);
+//     return ret;
+// }
+
+std::string get_random_string(int length) {
+    std::string ret;
+
+    std::mt19937 engine(time(NULL));
+    std::uniform_int_distribution<char> dis('a', 'z');
+    auto gen = std::bind(dis, engine);
+
+    for(int i = 0; i < length; ++i) {
+        ret += gen();
     }
 
-    // Check if the records are inserted
-    for(int i = 0; i < rec; ++i) {
-        char ret_val[120];
-        uint16_t val_size;
-        int flag = db_find(table_id, i, ret_val, &val_size);
+    return ret;
+}
+
+TEST(InsertionTest, HandlesInsertionRandomRecordKey) {
+    std::string pathname = "insert_randomrk_test.db";
+    std::remove(pathname.c_str());
+
+    int64_t table_id = open_table(pathname.c_str());
+    EXPECT_GE(table_id, 0)
+        << "open table failed.\n";
+
+    int insertion_count = 200'000;
+    std::vector<int> keys(insertion_count);
+    for(int i = 0; i < insertion_count; ++i) {
+        keys[i] = i;
+    }
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(keys.begin(), keys.end(), g);
+
+    std::vector<std::string> records;
+    uint16_t record_size = 100;
+    for(int i = 0; i < insertion_count; ++i) {
+        std::string tmp = get_random_string(record_size);
+        const char* record = tmp.c_str();
+        records.push_back(tmp);
+
+        int64_t key = keys[i];
+        int flag = db_insert(table_id, key, record, record_size);
         EXPECT_EQ(flag, 0)
-            << "key: " << i << " value: " << ret_val << " size: " << val_size;
-        EXPECT_EQ(val_size, size);
-        EXPECT_EQ(std::string(ret_val, val_size), value)
-            << "i: " << i << ", ret_val: " << ret_val << ", val_size: " << val_size << '\n';
+            << "insertion failed(" << i << "th insertion, " << key << " key).\n";
+    }
+
+    for(int i = 0; i < insertion_count; ++i) {
+        int64_t key = keys[i];
+        char ret_val[200];
+        uint16_t val_size;
+        int flag = db_find(table_id, key, ret_val, &val_size);
+        EXPECT_EQ(flag, 0)
+            << "find failed(" << key << ").\n";
+        EXPECT_EQ(val_size, record_size)
+            << "not expected value size( get : " << val_size << ", original : " << record_size << " ).\n";
+        EXPECT_EQ(std::string(ret_val, val_size), std::string(records[i].c_str(), record_size))
+            << "not expected value( get : " << ret_val << ", original : " << records[i] << " ).\n";
     }
 
     shutdown_db();
+    std::remove(pathname.c_str());
 }
 
-// TEST(FindTest, HandlesFind) {
-//     int64_t table_id;
-//     std::string pathname = "find_test.db";
-//     std::remove(pathname.c_str());
+TEST(InsertionTest, HandlesInsertionIncreasingOrderKey) {
+    std::string pathname = "insert_inc_test.db";
+    std::remove(pathname.c_str());
 
-//     // Open a database file
-//     table_id = open_table(pathname.c_str());
-
-//     // Check if the file is opened
-//     ASSERT_TRUE(table_id >= 0);
-
-//     const char* value = "valueasdf12nnnfd9hhajibvidns01237dabasijgas";
-//     uint16_t size = 44;
-//     // Insert 1 record
-//     int flag = db_insert(table_id, 154, value, size);
-
-//     // Check if the record is inserted
-//     EXPECT_EQ(flag, 0);
+    int64_t table_id = open_table(pathname.c_str());
+    EXPECT_GE(table_id, 0)
+        << "open table failed.\n";
     
-//     char* ret_val = new char[100];
-//     uint16_t val_size;
-//     flag = db_find(table_id, 154, ret_val, &val_size);
-//     EXPECT_EQ(flag, 0);
+    const char* record = "<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>";
+    uint16_t record_size = strlen(record);
 
-//     // Check if the record is found
-//     EXPECT_EQ(std::string(ret_val, val_size), std::string(value, size))
-//         << "The value is not the same as the inserted one\n";
+    int insertion_count = 10'000;
+    for(int i = 0; i < insertion_count; ++i) {
+        int64_t key = i;
+        int flag = db_insert(table_id, key, record, record_size);
+        EXPECT_EQ(flag, 0)
+            << "insertion failed(" << i << "th insertion, " << key << " key).\n";
+    }
 
-//     delete[] ret_val;
+    for(int i = 0; i < insertion_count; ++i) {
+        int64_t key = i;
+        char ret_val[200];
+        uint16_t val_size;
+        int flag = db_find(table_id, key, ret_val, &val_size);
+        EXPECT_EQ(flag, 0)
+            << "find failed(" << key << ").\n";
+        EXPECT_EQ(val_size, record_size)
+            << "not expected value size( get : " << val_size << ", original : " << record_size << " ).\n";
+        EXPECT_EQ(std::string(ret_val, val_size), std::string(record, record_size))
+            << "not expected value( get : " << ret_val << ", original : " << record << " ).\n";
+    }
 
-//     shutdown_db();
-// }
+    shutdown_db();
+    std::remove(pathname.c_str());
+}
+
+TEST(InsertionTest, HandlesInsertionDecreasingOrderKey) {
+    std::string pathname = "insert_dec_test.db";
+    std::remove(pathname.c_str());
+
+    int64_t table_id = open_table(pathname.c_str());
+    EXPECT_GE(table_id, 0)
+        << "open table failed.\n";
+    
+    const char* record = "<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>";
+    uint16_t record_size = strlen(record);
+
+    int insertion_count = 10'000;
+    for(int i = insertion_count; i > 0; --i) {
+        int64_t key = i;
+        int flag = db_insert(table_id, key, record, record_size);
+        EXPECT_EQ(flag, 0)
+            << "insertion failed(" << i << "th insertion, " << key << " key).\n";
+    }
+
+    for(int i = 1; i <= insertion_count; ++i) {
+        int64_t key = i;
+        char ret_val[200];
+        uint16_t val_size;
+        int flag = db_find(table_id, key, ret_val, &val_size);
+        EXPECT_EQ(flag, 0)
+            << "find failed(" << key << ").\n";
+        EXPECT_EQ(val_size, record_size)
+            << "not expected value size( get : " << val_size << ", original : " << record_size << " ).\n";
+        EXPECT_EQ(std::string(ret_val, val_size), std::string(record, record_size))
+            << "not expected value( get : " << ret_val << ", original : " << record << " ).\n";
+    }
+
+    shutdown_db();
+    std::remove(pathname.c_str());
+}
+
+TEST(InsertionTest, HandlesInsertionRandomKey) {
+    std::string pathname = "insert_random_test.db";
+    std::remove(pathname.c_str());
+
+    int64_t table_id = open_table(pathname.c_str());
+    EXPECT_GE(table_id, 0)
+        << "open table failed.\n";
+    
+    const char* record = "<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>";
+    uint16_t record_size = strlen(record);
+
+    int insertion_count = 10'000;
+    std::vector<int> keys(insertion_count);
+    for(int i = 0; i < insertion_count; ++i) {
+        keys[i] = i;
+    }
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(keys.begin(), keys.end(), g);
+
+    for(int i = insertion_count; i > 0; --i) {
+        int64_t key = keys[i];
+        int flag = db_insert(table_id, key, record, record_size);
+        EXPECT_EQ(flag, 0)
+            << "insertion failed(" << i << "th insertion, " << key << " key).\n";
+    }
+
+    for(int i = 1; i <= insertion_count; ++i) {
+        int64_t key = keys[i];
+        char ret_val[200];
+        uint16_t val_size;
+        int flag = db_find(table_id, key, ret_val, &val_size);
+        EXPECT_EQ(flag, 0)
+            << "find failed(" << key << ").\n";
+        EXPECT_EQ(val_size, record_size)
+            << "not expected value size( get : " << val_size << ", original : " << record_size << " ).\n";
+        EXPECT_EQ(std::string(ret_val, val_size), std::string(record, record_size))
+            << "not expected value( get : " << ret_val << ", original : " << record << " ).\n";
+    }
+
+    shutdown_db();
+    std::remove(pathname.c_str());
+}

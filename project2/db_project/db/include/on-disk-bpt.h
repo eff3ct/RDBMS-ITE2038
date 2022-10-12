@@ -2,6 +2,7 @@
 #define ON_DISK_BPT_H
 
 #include "file.h"
+#include <algorithm>
 
 /* Util Functions */
 slotnum_t cut_leaf(page_t* leaf);
