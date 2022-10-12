@@ -15,8 +15,9 @@ int64_t open_table(const char* pathname) {
 * If success, return 0 else return non-zero value.
 */
 int db_insert(int64_t table_id, int64_t key, const char* value, uint16_t val_size) {
-    // TODO
-    // 1. valid data size check
+    // valid size check
+    if(val_size < 50 || val_size > 112) return -1;
+
     page_t header;
     file_read_page(table_id, 0, &header);
     pagenum_t root = page_io::header::get_root_page(&header);

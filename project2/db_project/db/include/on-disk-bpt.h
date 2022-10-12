@@ -28,7 +28,7 @@ pagenum_t insert(int64_t table_id, pagenum_t root, int64_t key, const char* valu
 /* Deletion */
 pagenum_t adjust_root(int64_t table_id, pagenum_t root);
 pagenum_t merge_nodes(int64_t table_id, pagenum_t root, pagenum_t node, pagenum_t neighbor, pagenum_t neighbor_idx, int64_t prime_key);
-pagenum_t redistribute_nodes(int64_t table_id, pagenum_t node, pagenum_t neighbor, pagenum_t neighbor_idx, pagenum_t prime_key_idx, int64_t prime_key);
+pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, pagenum_t neighbor, pagenum_t neighbor_idx, pagenum_t prime_key_idx, int64_t prime_key);
 pagenum_t remove_entry_from_node(int64_t table_id, int64_t key, pagenum_t node);
 pagenum_t delete_entry(int64_t table_id, pagenum_t root, pagenum_t node, int64_t key);
 pagenum_t master_delete(int64_t table_id, pagenum_t root, int64_t key);

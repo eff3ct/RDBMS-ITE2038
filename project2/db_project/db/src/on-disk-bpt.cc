@@ -8,7 +8,7 @@ slotnum_t cut_leaf(std::vector<slot_t>& slots) {
     slotnum_t num_slots = slots.size();
     slotnum_t cut = 0;
     slotnum_t size = 0;
-    for(slotnum_t i = 0; i < num_slots; i++) {
+    for(slotnum_t i = 0; i < num_slots; ++i) {
         size += slot_io::get_record_size(&slots[i]) + SLOT_SIZE;
         if(size >= (PAGE_SIZE - PAGE_HEADER_SIZE) / 2) {
             cut = i;
@@ -419,7 +419,6 @@ pagenum_t insert(int64_t table_id, pagenum_t root, int64_t key, const char* valu
 }
 
 /* * * * * * * * * * * * * * DELETE * * * * * * * * * * * * * */ 
-// TODO 
 
 pagenum_t adjust_root(int64_t table_id, pagenum_t root) {
     pagenum_t new_root;
@@ -446,7 +445,90 @@ pagenum_t adjust_root(int64_t table_id, pagenum_t root) {
 }
 
 pagenum_t remove_entry_from_node(int64_t table_id, int64_t key, pagenum_t node) {
+    /* Remove the key and record(if node is leaf) from the node. */
 
+    /* Case : leaf node */
+    /* Delete the record and shift other records accordingly. */
+
+    /* Update num keys */
+
+    return node;    
+}
+
+pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, pagenum_t neighbor, pagenum_t neighbor_idx, pagenum_t prime_key_idx, int64_t prime_key) {
+    page_t node_page, neighbor_page;
+    
+    if(neighbor_idx != -1) {
+        /* neighbor is not on the extreme */
+    }
+    else {
+        /* neighbor is on the extreme */
+    }
+
+    pagenum_t node_num_keys = page_io::get_key_count(&node_page);
+    pagenum_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+    page_io::set_key_count(&node_page, node_num_keys + 1);
+    page_io::set_key_count(&neighbor_page, neighbor_num_keys - 1);
+
+    return root;
+}
+
+pagenum_t merge_nodes(int64_t table_id, pagenum_t root, pagenum_t node, pagenum_t neighbor, pagenum_t neighbor_idx, int64_t prime_key) {
+    if(neighbor_idx == -1) std::swap(node, neighbor);
+
+    page_t neighbor_page;
+    file_read_page(table_id, neighbor, &neighbor_page);
+    
+    pagenum_t neighbor_insertion_idx = page_io::get_key_count(&neighbor_page);
+
+    page_t node_page;
+    file_read_page(table_id, node, &node_page);
+    bool is_leaf = page_io::is_leaf(&node_page);
+
+    if(!is_leaf) {
+        pagenum_t neighbor_num_keys, node_num_keys;
+
+        page_io::internal::set_key(&neighbor_page, neighbor_insertion_idx, prime_key);
+        neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+        page_io::set_key_count(&neighbor_page, neighbor_num_keys + 1);
+        
+        pagenum_t i, j;
+        pagenum_t node_end = page_io::get_key_count(&node_page);
+        for(i = neighbor_insertion_idx + 1, j = 0; j < node_end; ++i, ++j) {
+            pagenum_t temp_child = page_io::internal::get_child(&node_page, j);
+            page_io::internal::set_child(&neighbor_page, i, temp_child);
+            pagenum_t temp_key = page_io::internal::get_key(&node_page, j);
+            page_io::internal::set_key(&neighbor_page, i, temp_key);
+
+            /* update key count */
+            neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+            node_num_keys = page_io::get_key_count(&node_page);
+            page_io::set_key_count(&neighbor_page, neighbor_num_keys + 1);
+            page_io::set_key_count(&node_page, node_num_keys - 1);
+        }
+        pagenum_t temp_child = page_io::internal::get_child(&node_page, j);
+        page_io::internal::set_child(&neighbor_page, i, temp_child);
+
+        neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+        for(pagenum_t i = 0; i < neighbor_num_keys + 1; ++i) {
+            pagenum_t child = page_io::internal::get_child(&neighbor_page, i);
+            page_t child_page;
+            file_read_page(table_id, child, &child_page);
+            page_io::set_parent_page(&child_page, neighbor);
+            file_write_page(table_id, child, &child_page);
+        }
+
+        file_write_page(table_id, neighbor, &neighbor_page);
+    }
+    else {
+        /* Leaf node merge */
+    }
+
+    pagenum_t parent = page_io::get_parent_page(&node_page);
+    root = delete_entry(table_id, root, parent, prime_key);
+    file_free_page(table_id, node);
+
+    return root;
 }
 
 pagenum_t delete_entry(int64_t table_id, pagenum_t root, pagenum_t node, int64_t key) {
@@ -455,17 +537,52 @@ pagenum_t delete_entry(int64_t table_id, pagenum_t root, pagenum_t node, int64_t
     /* Case : Deletion from the root */
     if(node == root) return adjust_root(table_id, root);
 
-    /* Case : Deletion from the internal node */
-    // Do something
+    page_t node_page;
+    file_read_page(table_id, node, &node_page);
+    uint32_t num_keys = page_io::get_key_count(&node_page);
+    bool is_leaf = page_io::is_leaf(&node_page);
 
-    /* Case : Deletion from the leaf node */
-    // Do something
+    uint32_t min_keys = is_leaf ? -1 : cut_internal();
+    
+    /* Case : node stays at or above minimum after deletion */
+    if(!is_leaf && num_keys >= min_keys) return root;
+    else if(is_leaf) {
+        pagenum_t free_space = page_io::leaf::get_free_space(&node_page);
+        if(free_space < THRESHOLD) return root;
+    }
 
-    /* Case : Merge */
-    // Do something
+    pagenum_t neighbor_idx = get_neighbor_idx(table_id, node);
+    pagenum_t prime_key_idx = (neighbor_idx == -1) ? 0 : neighbor_idx;
+    pagenum_t prime_key = is_leaf 
+    ? page_io::leaf::get_key(&node_page, prime_key_idx) 
+    : page_io::internal::get_key(&node_page, prime_key_idx);
+    
+    pagenum_t parent = page_io::get_parent_page(&node_page);
+    page_t parent_page;
+    file_read_page(table_id, parent, &parent_page);
 
-    /* Case : Redistribute */
-    // Do something
+    pagenum_t neighbor = (neighbor_idx == -1) 
+    ? page_io::internal::get_child(&parent_page, 1) 
+    : page_io::internal::get_child(&parent_page, neighbor_idx);
+
+    page_t neighbor_page;
+    file_read_page(table_id, neighbor, &neighbor_page);
+
+    uint32_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+
+    if(!is_leaf) {
+        if(neighbor_num_keys + num_keys < INTERNAL_ORDER - 1) return merge_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key);
+        else return redistribute_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key_idx, prime_key);
+    }
+    else {
+        pagenum_t free_space = page_io::leaf::get_free_space(&node_page);
+        pagenum_t neighbor_free_space = page_io::leaf::get_free_space(&neighbor_page);
+        pagenum_t merged_space = (PAGE_SIZE - PAGE_HEADER_SIZE) - free_space
+        + (PAGE_SIZE - PAGE_HEADER_SIZE) - neighbor_free_space;
+
+        if(merged_space <= (PAGE_SIZE - PAGE_HEADER_SIZE)) return merge_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key);
+        else return redistribute_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key_idx, prime_key);
+    }
 }
 
 /* Master deletion function */

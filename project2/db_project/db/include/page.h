@@ -22,6 +22,7 @@
 #define INTERNAL_ORDER (125)
 #define PAGE_HEADER_SIZE (128)
 #define INITIAL_FREE_SPACE (3968)
+#define THRESHOLD (2500)
 
 typedef uint64_t pagenum_t;
 typedef uint16_t slotnum_t;
