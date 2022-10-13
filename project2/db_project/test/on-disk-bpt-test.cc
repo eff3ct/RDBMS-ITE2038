@@ -6,20 +6,6 @@
 #include <random>
 #include <algorithm>
 
-// std::string get_random_string(int length) {
-//     std::string ret;
-
-//     std::mt19937 engine(time(NULL));
-//     std::uniform_int_distribution<char> dis('a', 'z');
-//     auto gen = bind(dis, engine);
-
-//     for(int i = 0; i < length; ++i) {
-//         ret += gen();
-//     }
-
-//     return ret;
-// }
-
 std::string get_random_string(int length) {
     std::string ret;
 
@@ -81,14 +67,16 @@ TEST(OnDiskBplusTreeTest, NormalDeletionTest) {
         << "open table failed.\n";
     
     uint16_t record_size = 100;
+    char buf[200];    
 
     for(int i = 0; i < 100; ++i) {
         int64_t key = i;
+        EXPECT_EQ(db_find(table_id, key, buf, &record_size), 0)
+            << "FAIL : find failed / key has not been found. (" << i << "th find, " << key << " key).\n";
         int flag = db_delete(table_id, key);
         EXPECT_EQ(flag, 0)
             << "deletion failed(" << i << "th deletion, " << key << " key).\n";
 
-        char buf[200];    
         EXPECT_EQ(db_find(table_id, key, buf, &record_size), -1)
             << "find failed / key has been found. (" << i << "th find, " << key << " key).\n";
     }
@@ -134,13 +122,15 @@ TEST(OnDiskBplusTreeTest, LargeDeletionTest) {
         << "open table failed.\n";
     
     uint16_t record_size = 100;
+    char buf[200];    
     
     for(int i = 0; i < 10'000; ++i) {
         int64_t key = i;
+        EXPECT_EQ(db_find(table_id, key, buf, &record_size), 0)
+            << "FAIL : find failed / key has not been found. (" << i << "th find, " << key << " key).\n";
         int flag = db_delete(table_id, key);
         EXPECT_EQ(flag, 0)
             << "deletion failed(" << i << "th deletion, " << key << " key).\n";
-        char buf[200];    
         EXPECT_EQ(db_find(table_id, key, buf, &record_size), -1)
             << "find failed / key has been found. (" << i << "th find, " << key << " key).\n";
     }
@@ -170,6 +160,7 @@ TEST(OnDiskBplusTreeTest, VeryLargeInsertionTest) {
         int64_t key = i;
         char* ret_record = (char*)malloc(sizeof(char) * record_size);
         int flag = db_find(table_id, key, ret_record, &record_size);
+        
         EXPECT_EQ(flag, 0)
             << "FAIL : find failed(" << i << "th find, " << key << " key).\n";
         EXPECT_EQ(std::string(record), std::string(ret_record))
@@ -187,13 +178,15 @@ TEST(OnDiskBplusTreeTest, VeryLargeDeletionTest) {
         << "FAIL : open table failed.\n";
     
     uint16_t record_size = 100;
+    char buf[200];    
     
     for(int i = 0; i < 100'000; ++i) {
         int64_t key = i;
+        EXPECT_EQ(db_find(table_id, key, buf, &record_size), 0)
+            << "FAIL : find failed / key has not been found. (" << i << "th find, " << key << " key).\n";
         int flag = db_delete(table_id, key);
         EXPECT_EQ(flag, 0)
             << "FAIL : deletion failed(" << i << "th deletion, " << key << " key).\n";
-        char buf[200];    
         EXPECT_EQ(db_find(table_id, key, buf, &record_size), -1)
             << "FAIL : find failed / key has been found. (" << i << "th find, " << key << " key).\n";
     }
@@ -269,6 +262,9 @@ TEST(OnDiskBplusTreeTest, HandlesDeletionRandomRecordKey) {
         int64_t key = keys[i];
         char buf[200];
         uint16_t val_size;
+        EXPECT_EQ(db_find(table_id, key, buf, &val_size), 0)
+            << "FAIL : find failed / key has not been found. (" << i << "th find, " << key << " key).\n";
+
         int flag = db_delete(table_id, key);
 
         EXPECT_EQ(flag, 0)

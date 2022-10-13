@@ -1,7 +1,5 @@
 #include "on-disk-bpt.h"
 
-/* TODO */
-// 1. Fix util functions to reference.
 struct comparison_struct {
     slot_t slot;
     std::string record;

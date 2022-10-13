@@ -67,6 +67,7 @@ void TableManager::close_all() {
     fd_to_table_id.clear();
     table_id_to_fd.clear();
     opened_files.clear();
+    next_table_id = 0;
 }
 
 /* Global Table Manager */
