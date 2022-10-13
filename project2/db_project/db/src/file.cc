@@ -75,6 +75,7 @@ TableManager table_manager;
 // Open existing database file or create one if it doesn't exist
 int64_t file_open_table_file(const char* pathname) {
     int fd = open(pathname, O_RDWR | O_SYNC);
+
     // If file doesn't exist, create one
     if(fd < 0) {
         fd = open(pathname, O_RDWR | O_CREAT | O_SYNC, 0644);

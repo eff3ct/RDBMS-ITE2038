@@ -7,11 +7,13 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-set_tests_properties(${Tests} PROPERTIES TIMEOUT 100000)
+set_tests_properties(${Tests} PROPERTIES TIMEOUT 10000)
 
 set(DB_TESTS
-  insertion_test.cc
-  deletion_test.cc
+  file_test.cc
+  on-disk-bpt-test.cc
+  # insertion_test.cc
+  # deletion_test.cc
   # Add your test files here
   # foo/bar/your_test.cc
   )

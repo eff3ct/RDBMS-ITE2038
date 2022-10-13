@@ -1,5 +1,4 @@
 #include "on-disk-bpt.h"
-#include <iostream>
 
 /* TODO */
 // 1. Fix util functions to reference.
@@ -278,7 +277,7 @@ pagenum_t insert_into_leaf_after_splitting(int64_t table_id, pagenum_t root, pag
     file_write_page(table_id, leaf, &leaf_page);
     file_write_page(table_id, new_leaf, &new_leaf_page);
 
-    pagenum_t new_key = page_io::leaf::get_key(&new_leaf_page, 0);
+    int64_t new_key = page_io::leaf::get_key(&new_leaf_page, 0);
 
     return insert_into_parent(table_id, root, leaf, new_key, new_leaf);
 }
@@ -288,7 +287,7 @@ pagenum_t insert_into_node_after_splitting(int64_t table_id, pagenum_t root, pag
     file_read_page(table_id, old_node, &old_node_page);
     uint32_t num_keys = page_io::get_key_count(&old_node_page);
 
-    std::vector<pagenum_t> temp_keys(num_keys + 1);
+    std::vector<int64_t> temp_keys(num_keys + 1);
     std::vector<pagenum_t> temp_childs(num_keys + 2);
 
     for(pagenum_t i = 0, j = 0; i < num_keys + 1; ++i, ++j) {
@@ -404,7 +403,7 @@ pagenum_t insert_into_node(int64_t table_id, pagenum_t root, pagenum_t node, slo
     for(pagenum_t i = num_keys; i > left_idx; --i) {
         pagenum_t temp_child = page_io::internal::get_child(&node_page, i);
         page_io::internal::set_child(&node_page, i + 1, temp_child);
-        pagenum_t temp_key = page_io::internal::get_key(&node_page, i - 1);
+        int64_t temp_key = page_io::internal::get_key(&node_page, i - 1);
         page_io::internal::set_key(&node_page, i, temp_key);
     }
 
@@ -499,7 +498,7 @@ pagenum_t remove_entry_from_node(int64_t table_id, int64_t key, pagenum_t node) 
         pagenum_t j = i;
         pagenum_t num_keys = page_io::get_key_count(&node_page);
         for(++i; i < num_keys; ++i) {
-            pagenum_t temp_key = page_io::internal::get_key(&node_page, i);
+            int64_t temp_key = page_io::internal::get_key(&node_page, i);
             page_io::internal::set_key(&node_page, i - 1, temp_key);
         }
 
@@ -562,7 +561,7 @@ pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, p
             pagenum_t temp_child = page_io::internal::get_child(&node_page, num_keys);
             page_io::internal::set_child(&node_page, num_keys + 1, temp_child);
             for(pagenum_t i = num_keys; i > 0; --i) {
-                pagenum_t temp_key = page_io::internal::get_key(&node_page, i - 1);
+                int64_t temp_key = page_io::internal::get_key(&node_page, i - 1);
                 page_io::internal::set_key(&node_page, i, temp_key);
                 pagenum_t child = page_io::internal::get_child(&node_page, i - 1);
                 page_io::internal::set_child(&node_page, i, child);
@@ -584,7 +583,7 @@ pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, p
             page_t parent_page;
             pagenum_t parent = page_io::get_parent_page(&node_page);
             file_read_page(table_id, parent, &parent_page);
-            pagenum_t next_key = page_io::internal::get_key(&neighbor_page, neighbor_num_keys - 1);
+            int64_t next_key = page_io::internal::get_key(&neighbor_page, neighbor_num_keys - 1);
             page_io::internal::set_key(&parent_page, prime_key_idx, next_key);
             file_write_page(table_id, parent, &parent_page);
         }
@@ -623,7 +622,7 @@ pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, p
             pagenum_t parent = page_io::get_parent_page(&node_page);
             page_t parent_page;
             file_read_page(table_id, parent, &parent_page);
-            pagenum_t next_key = page_io::leaf::get_key(&node_page, 0);
+            int64_t next_key = page_io::leaf::get_key(&node_page, 0);
             page_io::internal::set_key(&parent_page, prime_key_idx, next_key);
             file_write_page(table_id, parent, &parent_page);
         }
@@ -644,7 +643,7 @@ pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, p
             page_t parent_page;
             pagenum_t parent = page_io::get_parent_page(&node_page);
             file_read_page(table_id, parent, &parent_page);
-            pagenum_t next_key = page_io::internal::get_key(&neighbor_page, 0);
+            int64_t next_key = page_io::internal::get_key(&neighbor_page, 0);
             page_io::internal::set_key(&parent_page, prime_key_idx, next_key);
             file_write_page(table_id, parent, &parent_page);
 
@@ -652,7 +651,7 @@ pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, p
             pagenum_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
             pagenum_t i;
             for(i = 0; i < neighbor_num_keys - 1; ++i) {
-                pagenum_t temp_key = page_io::internal::get_key(&neighbor_page, i + 1);
+                int64_t temp_key = page_io::internal::get_key(&neighbor_page, i + 1);
                 page_io::internal::set_key(&neighbor_page, i, temp_key);
                 pagenum_t temp_child = page_io::internal::get_child(&neighbor_page, i + 1);
                 page_io::internal::set_child(&neighbor_page, i, temp_child);
@@ -682,7 +681,7 @@ pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, p
             page_t parent_page;
             pagenum_t parent = page_io::get_parent_page(&node_page);
             file_read_page(table_id, parent, &parent_page);
-            pagenum_t next_key = page_io::leaf::get_key(&neighbor_page, 1);
+            int64_t next_key = page_io::leaf::get_key(&neighbor_page, 1);
             page_io::internal::set_key(&parent_page, prime_key_idx, next_key);
             file_write_page(table_id, parent, &parent_page);
 
@@ -746,7 +745,7 @@ pagenum_t merge_nodes(int64_t table_id, pagenum_t root, pagenum_t node, pagenum_
         for(i = neighbor_insertion_idx + 1, j = 0; j < node_end; ++i, ++j) {
             pagenum_t temp_child = page_io::internal::get_child(&node_page, j);
             page_io::internal::set_child(&neighbor_page, i, temp_child);
-            pagenum_t temp_key = page_io::internal::get_key(&node_page, j);
+            int64_t temp_key = page_io::internal::get_key(&node_page, j);
             page_io::internal::set_key(&neighbor_page, i, temp_key);
 
             /* update key count */
@@ -828,7 +827,7 @@ pagenum_t delete_entry(int64_t table_id, pagenum_t root, pagenum_t node, int64_t
 
     pagenum_t neighbor_idx = get_neighbor_idx(table_id, node);
     pagenum_t prime_key_idx = (neighbor_idx == -1) ? 0 : neighbor_idx;
-    pagenum_t prime_key = is_leaf 
+    int64_t prime_key = is_leaf 
     ? page_io::leaf::get_key(&node_page, prime_key_idx) 
     : page_io::internal::get_key(&node_page, prime_key_idx);
     

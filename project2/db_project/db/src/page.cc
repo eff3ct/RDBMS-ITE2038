@@ -80,9 +80,9 @@ void page_io::internal::set_new_internal_page(page_t* internal_page) {
     memcpy(internal_page->data + sizeof(pagenum_t) + sizeof(int32_t), &key_count, sizeof(uint32_t));
 }
 
-pagenum_t page_io::internal::get_key(const page_t* internal_page, pagenum_t idx) {
-    pagenum_t key;
-    memcpy(&key, internal_page->data + INTERNAL_PAGE_OFFSET + sizeof(pagenum_t) + idx * 2 * sizeof(pagenum_t), sizeof(pagenum_t));
+int64_t page_io::internal::get_key(const page_t* internal_page, pagenum_t idx) {
+    int64_t key;
+    memcpy(&key, internal_page->data + INTERNAL_PAGE_OFFSET + sizeof(pagenum_t) + idx * 2 * sizeof(pagenum_t), sizeof(int64_t));
     return key;
 }
 pagenum_t page_io::internal::get_child(const page_t* internal_page, pagenum_t idx) {
@@ -90,8 +90,8 @@ pagenum_t page_io::internal::get_child(const page_t* internal_page, pagenum_t id
     memcpy(&child, internal_page->data + INTERNAL_PAGE_OFFSET + idx * 2 * sizeof(pagenum_t), sizeof(pagenum_t));
     return child;
 }
-void page_io::internal::set_key(page_t* internal_page, pagenum_t idx, pagenum_t key) {
-    memcpy(internal_page->data + INTERNAL_PAGE_OFFSET + sizeof(pagenum_t) + idx * 2 * sizeof(pagenum_t), &key, sizeof(pagenum_t));
+void page_io::internal::set_key(page_t* internal_page, pagenum_t idx, int64_t key) {
+    memcpy(internal_page->data + INTERNAL_PAGE_OFFSET + sizeof(pagenum_t) + idx * 2 * sizeof(pagenum_t), &key, sizeof(int64_t));
 }
 void page_io::internal::set_child(page_t* internal_page, pagenum_t idx, pagenum_t child) {
     memcpy(internal_page->data + INTERNAL_PAGE_OFFSET + idx * 2 * sizeof(pagenum_t), &child, sizeof(pagenum_t));
@@ -145,8 +145,8 @@ pagenum_t page_io::leaf::get_right_sibling(const page_t* leaf_page) {
     return right_sibling_page;
 }
 // Get key from (slot_num) slot.
-pagenum_t page_io::leaf::get_key(const page_t* leaf_page, slotnum_t slot_num) {
-    pagenum_t key;
+int64_t page_io::leaf::get_key(const page_t* leaf_page, slotnum_t slot_num) {
+    int64_t key;
     memcpy(&key, leaf_page->data + LEAF_PAGE_SLOT_OFFSET + SLOT_SIZE * slot_num, sizeof(pagenum_t));
     return key;
 }
@@ -188,9 +188,9 @@ slotnum_t slot_io::get_record_size(const slot_t* slot) {
     memcpy(&size, slot->data + sizeof(int64_t), sizeof(slotnum_t));
     return size;
 }
-pagenum_t slot_io::get_key(const slot_t* slot) {
-    pagenum_t key;
-    memcpy(&key, slot->data, sizeof(pagenum_t));
+int64_t slot_io::get_key(const slot_t* slot) {
+    int64_t key;
+    memcpy(&key, slot->data, sizeof(int64_t));
     return key;
 }
 

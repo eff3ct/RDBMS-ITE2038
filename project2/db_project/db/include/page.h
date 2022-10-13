@@ -51,9 +51,9 @@ namespace page_io {
     }
     namespace internal {
         void set_new_internal_page(page_t* internal_page);
-        pagenum_t get_key(const page_t* internal_page, pagenum_t idx);
+        int64_t get_key(const page_t* internal_page, pagenum_t idx);
         pagenum_t get_child(const page_t* internal_page, pagenum_t idx);
-        void set_key(page_t* internal_page, pagenum_t idx, pagenum_t key);
+        void set_key(page_t* internal_page, pagenum_t idx, int64_t key);
         void set_child(page_t* internal_page, pagenum_t idx, pagenum_t child);
     }
     namespace leaf {
@@ -66,7 +66,7 @@ namespace page_io {
         void set_right_sibling(page_t* leaf_page, pagenum_t right_sibling);
         pagenum_t get_free_space(const page_t* leaf_page);
         pagenum_t get_right_sibling(const page_t* leaf_page);
-        pagenum_t get_key(const page_t* leaf_page, slotnum_t slot_num);
+        int64_t get_key(const page_t* leaf_page, slotnum_t slot_num);
         slotnum_t get_record_size(const page_t* leaf_page, slotnum_t slot_num);
         slotnum_t get_offset(const page_t* leaf_page, slotnum_t slot_num);
     }
@@ -78,7 +78,7 @@ namespace slot_io {
     void set_offset(slot_t* slot, slotnum_t offset);
     slotnum_t get_record_size(const slot_t* slot);
     slotnum_t get_offset(const slot_t* slot);
-    pagenum_t get_key(const slot_t* slot);
+    int64_t get_key(const slot_t* slot);
 }
 
 #endif
