@@ -470,8 +470,19 @@ pagenum_t adjust_root(int64_t table_id, pagenum_t root) {
         file_read_page(table_id, new_root, &new_root_page);
         page_io::set_parent_page(&new_root_page, 0);
         file_write_page(table_id, new_root, &new_root_page);
+
+        page_t header_page;
+        file_read_page(table_id, 0, &header_page);
+        page_io::header::set_root_page(&header_page, new_root);
+        file_write_page(table_id, 0, &header_page);
     }
-    else new_root = 0;
+    else {
+        new_root = 0;
+        page_t header_page;
+        file_read_page(table_id, 0, &header_page);
+        page_io::header::set_root_page(&header_page, 0);
+        file_write_page(table_id, 0, &header_page);
+    }
 
     file_free_page(table_id, root);
     

@@ -30,6 +30,49 @@ TEST(OnDiskBplusTreeTest, DoubleOpenTest) {
     shutdown_db();
 }
 
+TEST(OnDiskBplusTreeTest, InsertionClearInsertTest) {
+    if(std::remove("clear_test.db")) std::cout << "ALERT : remove existing file.\n";
+    int64_t table_id = open_table("clear_test.db");
+    EXPECT_GE(table_id, 0)
+        << "open table failed.\n";
+    
+    uint16_t record_size = 100;
+    const char* record = get_random_string(record_size).c_str();
+
+    for(int i = 0; i < 100'000; ++i) {
+        int64_t key = i;
+        int flag = db_insert(table_id, key, record, record_size);
+        EXPECT_EQ(flag, 0)
+            << "insertion failed(" << i << "th insertion, " << key << " key).\n";
+    }
+
+    char buf[200];
+    
+    for(int i = 0; i < 100'000; ++i) {
+        int64_t key = i;
+        EXPECT_EQ(db_find(table_id, key, buf, &record_size), 0)
+            << "FAIL : find failed / key has not been found. (" << i << "th find, " << key << " key).\n";
+        int flag = db_delete(table_id, key);
+        EXPECT_EQ(flag, 0)
+            << "deletion failed(" << i << "th deletion, " << key << " key).\n";
+
+        EXPECT_EQ(db_find(table_id, key, buf, &record_size), -1)
+            << "find failed / key has been found. (" << i << "th find, " << key << " key).\n";
+    }
+
+    for(int i = 0; i < 100'000; ++i) {
+        int64_t key = i;
+        int flag = db_insert(table_id, key, record, record_size);
+        EXPECT_EQ(flag, 0)
+            << "insertion failed(" << i << "th insertion, " << key << " key).\n";
+    }
+
+    EXPECT_EQ(shutdown_db(), 0)
+        << "shutdown_db failed.\n";
+
+    std::remove("clear_test.db");
+}
+
 TEST(OnDiskBplusTreeTest, NormalInsertionTest) {
     if(std::remove("normal_insertion_test.db")) std::cout << "ALERT : remove existing file.\n";
     int64_t table_id = open_table("normal_insertion_test.db");
