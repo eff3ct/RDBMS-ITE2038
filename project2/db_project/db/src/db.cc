@@ -82,12 +82,14 @@ std::vector<int64_t>* keys, std::vector<char*>* values, std::vector<uint16_t>* v
     uint32_t num_keys = page_io::get_key_count(&page);
 
     while(i < num_keys 
-    && page_io::leaf::get_key(&page, i) <= end_key) 
+    && page_io::leaf::get_key(&page, i) < begin_key) 
         i++;
 
     if(i == num_keys) return -1;
 
     while(node != 0) {
+        file_read_page(table_id, node, &page);
+        num_keys = page_io::get_key_count(&page);
         for(; i < num_keys && page_io::leaf::get_key(&page, i) <= end_key; ++i) {
             keys->push_back(page_io::leaf::get_key(&page, i));
             uint16_t val_size = page_io::leaf::get_record_size(&page, i);

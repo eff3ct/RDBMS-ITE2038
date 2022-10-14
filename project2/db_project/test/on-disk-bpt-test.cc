@@ -30,6 +30,57 @@ TEST(OnDiskBplusTreeTest, DoubleOpenTest) {
     shutdown_db();
 }
 
+TEST(OnDiskBplusTreeTest, ScanTest) {
+    if(std::remove("scan_test.db")) std::cout << "ALERT : remove existing file.\n";
+    int64_t table_id = open_table("scan_test.db");
+    EXPECT_GE(table_id, 0)
+        << "open table failed.\n";
+    
+    uint16_t record_size = 100;
+
+    std::vector<std::string> records(1000);
+
+    for(int i = 0; i < 1000; ++i) {
+        const char* record = get_random_string(record_size).c_str();
+        records[i] = std::string(record, record_size);
+        int64_t key = i;
+        int flag = db_insert(table_id, key, record, record_size);
+        EXPECT_EQ(flag, 0)
+            << "insertion failed(" << i << "th insertion, " << key << " key).\n";
+    }
+    
+    int64_t key_start = 100;
+    int64_t key_end = 400;
+
+    std::vector<int64_t> keys;
+    std::vector<char*> values;
+    std::vector<uint16_t> val_sizes;
+    int flag = db_scan(table_id, key_start, key_end, &keys, &values, &val_sizes);
+
+    EXPECT_EQ(flag, 0)
+        << "scan failed.\n";
+
+    EXPECT_EQ(keys.size(), 301)
+        << "Fetched key count is not correct.\n";
+    EXPECT_EQ(values.size(), 301)
+        << "Fetched value count is not correct.\n";
+    EXPECT_EQ(val_sizes.size(), 301)
+        << "Fetched value size count is not correct.\n";
+
+    for(int i = 0; i < 301; ++i) {
+        EXPECT_EQ(std::string(values[i], val_sizes[i]), records[key_start + i])
+            << "Fetched data is not same as inserted data.\n"
+            << "key : " << keys[i] << " ," 
+            << "value : " << values[i] << " ," 
+            << "val_size : " << val_sizes[i] << " ," 
+            << "record : " << records[key_start + i] << " ," 
+            << "record_size : " << records[key_start + i].size() << "\n";
+    }
+
+    EXPECT_EQ(shutdown_db(), 0)
+        << "shutdown_db failed.\n";
+}
+
 TEST(OnDiskBplusTreeTest, InsertionClearInsertTest) {
     if(std::remove("clear_test.db")) std::cout << "ALERT : remove existing file.\n";
     int64_t table_id = open_table("clear_test.db");
