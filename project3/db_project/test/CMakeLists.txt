@@ -11,8 +11,8 @@ set_tests_properties(${Tests} PROPERTIES TIMEOUT 10000)
 
 set(DB_TESTS
   # file_test.cc
-  on-disk-bpt-test.cc
-  # insertion_test.cc
+  # on-disk-bpt-test.cc
+  insertion_test.cc
   # deletion_test.cc
   # Add your test files here
   # foo/bar/your_test.cc

@@ -5,19 +5,23 @@
 #include "file.h"
 
 #include <unordered_map>
+#include <iostream>
 
 struct buffer_t {
     char frame[PAGE_SIZE];
     int64_t table_id;
     pagenum_t pagenum;
     bool is_dirty;
-    int32_t is_pinned;
+    bool is_pinned;
     struct buffer_t* next;
     struct buffer_t* prev;
 
     buffer_t();
     buffer_t(int64_t table_id, pagenum_t pagenum);
 };
+
+// TODO
+// 1. fix dynamic methods to static.
 
 class BufferManager {
     /* field */
@@ -57,11 +61,13 @@ class BufferManager {
         /* allocate page */
         pagenum_t buffer_alloc_page(int64_t table_id);
         /* read page through buffer */
-        void buffer_read_page(int64_t table_id, pagenum_t pagenum, page_t* dest);
-        /* write page through buffer */
-        void buffer_write_page(int64_t table_id, pagenum_t pagenum, const page_t* src);
+        buffer_t* buffer_read_page(int64_t table_id, pagenum_t pagenum);
+        /* write page on buffer block */
+        void buffer_write_page(int64_t table_id, pagenum_t pagenum); 
         /* free page */
         void buffer_free_page(int64_t table_id, pagenum_t pagenum);
+        /* close table */
+        void buffer_close_table_file();
         /* flush all buffer blocks and de-allocate buffer blocks */
         void destroy_all();
         /* Destructor */

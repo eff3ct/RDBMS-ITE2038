@@ -38,11 +38,13 @@ TEST(InsertionTest, HandlesInsertionRandomRecordKey) {
     std::string pathname = "insert_randomrk_test.db";
     std::remove(pathname.c_str());
 
+    buffer_manager.set_max_count(50);
+
     int64_t table_id = open_table(pathname.c_str());
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
 
-    int insertion_count = 200'000;
+    int insertion_count = 10000;
     std::vector<int> keys(insertion_count);
     for(int i = 0; i < insertion_count; ++i) {
         keys[i] = i;
@@ -85,6 +87,8 @@ TEST(InsertionTest, HandlesInsertionIncreasingOrderKey) {
     std::string pathname = "insert_inc_test.db";
     std::remove(pathname.c_str());
 
+    buffer_manager.set_max_count(50);
+
     int64_t table_id = open_table(pathname.c_str());
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
@@ -92,7 +96,7 @@ TEST(InsertionTest, HandlesInsertionIncreasingOrderKey) {
     const char* record = "<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>";
     uint16_t record_size = strlen(record);
 
-    int insertion_count = 10'000;
+    int insertion_count = 100;
     for(int i = 0; i < insertion_count; ++i) {
         int64_t key = i;
         int flag = db_insert(table_id, key, record, record_size);
@@ -121,6 +125,8 @@ TEST(InsertionTest, HandlesInsertionDecreasingOrderKey) {
     std::string pathname = "insert_dec_test.db";
     std::remove(pathname.c_str());
 
+    buffer_manager.set_max_count(50);
+
     int64_t table_id = open_table(pathname.c_str());
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
@@ -128,7 +134,7 @@ TEST(InsertionTest, HandlesInsertionDecreasingOrderKey) {
     const char* record = "<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>";
     uint16_t record_size = strlen(record);
 
-    int insertion_count = 10'000;
+    int insertion_count = 100;
     for(int i = insertion_count; i > 0; --i) {
         int64_t key = i;
         int flag = db_insert(table_id, key, record, record_size);
@@ -157,6 +163,8 @@ TEST(InsertionTest, HandlesInsertionRandomKey) {
     std::string pathname = "insert_random_test.db";
     std::remove(pathname.c_str());
 
+    buffer_manager.set_max_count(50);
+
     int64_t table_id = open_table(pathname.c_str());
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
@@ -164,7 +172,7 @@ TEST(InsertionTest, HandlesInsertionRandomKey) {
     const char* record = "<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>";
     uint16_t record_size = strlen(record);
 
-    int insertion_count = 10'000;
+    int insertion_count = 100;
     std::vector<int> keys(insertion_count);
     for(int i = 0; i < insertion_count; ++i) {
         keys[i] = i;
@@ -191,6 +199,40 @@ TEST(InsertionTest, HandlesInsertionRandomKey) {
             << "not expected value size( get : " << val_size << ", original : " << record_size << " ).\n";
         EXPECT_EQ(std::string(ret_val, val_size), std::string(record, record_size))
             << "not expected value( get : " << ret_val << ", original : " << record << " ).\n";
+    }
+
+    shutdown_db();
+    std::remove(pathname.c_str());
+}
+
+TEST(InsertionTest, HandlesInsertionIncreasingOrderFindTest) {
+    std::string pathname = "insert_inc_find_test.db";
+    if(!std::remove(pathname.c_str())) std::cout << "Remove existing file.\n";
+
+    buffer_manager.set_max_count(50);
+
+    int64_t table_id = open_table(pathname.c_str());
+    EXPECT_GE(table_id, 0)
+        << "open table failed.\n";
+    
+    const char* record = "<INSERTION_TEST::RECORD>|-|<INSERTION_TEST::RECORD>";
+    uint16_t record_size = strlen(record);
+
+    int insertion_count = 100;
+    for(int i = 0; i < insertion_count; ++i) {
+        int64_t key = i;
+        int flag = db_insert(table_id, key, record, record_size);
+        EXPECT_EQ(flag, 0)
+            << "insertion failed(" << i << "th insertion, " << key << " key).\n";
+        if(flag == 0) std::cout << "insertion success : " << i << "th insertion, " << key << " key.\n";
+
+        char ret_val[200];
+        uint16_t val_size;
+        flag = db_find(table_id, key, ret_val, &val_size);
+        EXPECT_EQ(flag, 0)
+            << "find failed(" << key << ").\n";
+        if(flag == 0) std::cout << "find success : " << key << " key.\n";
+        else std::cout << "expected : " << record << ", get : " << std::string(ret_val, val_size) << ".\n";
     }
 
     shutdown_db();

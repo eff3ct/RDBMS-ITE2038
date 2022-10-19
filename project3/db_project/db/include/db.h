@@ -2,8 +2,13 @@
 #ifndef DB_H
 #define DB_H
 
+#include "buffer.h"
+#include "on-disk-bpt.h"
+
 #include <stdint.h>
 
+#include <iostream>
+#include <set>
 #include <vector>
 
 /* Open existing data file using ‘pathname’ or create one if not existed. 

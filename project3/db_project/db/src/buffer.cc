@@ -1,5 +1,7 @@
 #include "buffer.h"
 
+BufferManager buffer_manager;
+
 buffer_t::buffer_t() {
     table_id = -1;
     pagenum = -1;
@@ -13,7 +15,7 @@ buffer_t::buffer_t(int64_t table_id, pagenum_t pagenum) {
     this->table_id = table_id;
     this->pagenum = pagenum;
     is_dirty = false;
-    is_pinned = 0;
+    is_pinned = false;
     next = nullptr;
     prev = nullptr;
 }
@@ -43,7 +45,7 @@ void BufferManager::flush_buffer(buffer_t* buf) {
         buf->is_dirty = false;
     }
 
-    buf->is_pinned = 0;
+    buf->is_pinned = false;
 }
 
 void BufferManager::flush_buffer(int64_t table_id, pagenum_t pagenum) {
@@ -55,7 +57,7 @@ void BufferManager::flush_buffer(int64_t table_id, pagenum_t pagenum) {
         cur_buf->is_dirty = false;
     }
 
-    cur_buf->is_pinned = 0;
+    cur_buf->is_pinned = false;
 }
 
 bool BufferManager::is_buffer_exist(int64_t table_id, pagenum_t pagenum) {
@@ -74,6 +76,10 @@ buffer_t* BufferManager::find_victim() {
         if(!cur_buf->is_pinned) return cur_buf;
         cur_buf = cur_buf->prev;
     }
+
+    std::cerr << "ERROR : Eviction failed. No victim buffer found. (All pinned)" << std::endl;
+    exit(EXIT_FAILURE);
+
     return nullptr;
 }
 
@@ -99,7 +105,7 @@ void BufferManager::set_max_count(int max_count) { this->max_count = max_count; 
 void BufferManager::unpin_buffer(int64_t table_id, pagenum_t pagenum) {
     if(!is_buffer_exist(table_id, pagenum)) return;
     buffer_t* cur_buf = find_buffer(table_id, pagenum);
-    cur_buf->is_pinned--;
+    cur_buf->is_pinned = false;
 }
 
 int64_t BufferManager::buffer_open_table_file(const char* pathname) {
@@ -123,7 +129,11 @@ void BufferManager::destroy_all() {
     buf_tail->prev = buf_head;
 }
 
-void BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum, page_t* dest) {
+void BufferManager::buffer_close_table_file() {
+    file_close_table_files();
+}
+
+buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
     /* cache miss */
     if(!is_buffer_exist(table_id, pagenum)) {
         /* when buffer is full */
@@ -142,94 +152,72 @@ void BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum, page_t
             buffer_t* new_buf = new buffer_t(table_id, pagenum);
             file_read_page(table_id, pagenum, (page_t*)new_buf->frame);
             insert_into_head(new_buf);
-            new_buf->is_pinned++;
+            new_buf->is_pinned = true;
 
             // insert into hash
             int64_t new_key = convert_pair_to_key(table_id, pagenum);
             hash_pointer.insert({new_key, new_buf});
+
+            return new_buf;
         }
         /* buffer is not full */
         else {
             buffer_t* new_buf = new buffer_t(table_id, pagenum);
             file_read_page(table_id, pagenum, (page_t*)new_buf->frame);
             insert_into_head(new_buf);
-            new_buf->is_pinned++;
+            new_buf->is_pinned = true;
 
             // insert into hash
             int64_t new_key = convert_pair_to_key(table_id, pagenum);
             hash_pointer.insert({new_key, new_buf});
             cur_count++;
+
+            return new_buf;
         }
     }
     /* cache hit */
     else {
         buffer_t* cur_buf = find_buffer(table_id, pagenum);
-        memcpy(dest, cur_buf->frame, PAGE_SIZE);
-        cur_buf->is_pinned++;
+        cur_buf->is_pinned = true;
 
         // move to front
         move_to_head(cur_buf);
+        return cur_buf;
     }
+
+    return nullptr;
 }
 
-void BufferManager::buffer_write_page(int64_t table_id, pagenum_t pagenum, const page_t* src) {
-    /* cache miss */
-    if(!is_buffer_exist(table_id, pagenum)) {
-        /* when buffer is full */
-        if(cur_count == max_count) {
-            buffer_t* victim = find_victim();
-            if(victim->is_dirty) flush_buffer(victim);
-            int64_t key = convert_pair_to_key(victim->table_id, victim->pagenum);
-            hash_pointer.erase(key);
-            
-            // delete victim
-            victim->prev->next = victim->next;
-            victim->next->prev = victim->prev;
-            delete victim;
+void BufferManager::buffer_write_page(int64_t table_id, pagenum_t pagenum) {
+    if(!is_buffer_exist(table_id, pagenum)) return;
+    buffer_t* cur_buf = find_buffer(table_id, pagenum);
+    cur_buf->is_dirty = true;
 
-            // insert new buffer
-            buffer_t* new_buf = new buffer_t(table_id, pagenum);
-            memcpy(new_buf->frame, src, PAGE_SIZE);
-            new_buf->is_dirty = true;
-            new_buf->is_pinned++;
-            insert_into_head(new_buf);
-
-            // insert into hash
-            int64_t new_key = convert_pair_to_key(table_id, pagenum);
-            hash_pointer.insert({new_key, new_buf});
-        }
-        /* buffer is not full */
-        else {
-            buffer_t* new_buf = new buffer_t(table_id, pagenum);
-            memcpy(new_buf->frame, src, PAGE_SIZE);
-            new_buf->is_dirty = true;
-            new_buf->is_pinned++;
-            insert_into_head(new_buf);
-
-            // insert into hash
-            int64_t new_key = convert_pair_to_key(table_id, pagenum);
-            hash_pointer.insert({new_key, new_buf});
-            cur_count++;
-        }
-    }
-    /* cache hit */
-    else {
-        buffer_t* cur_buf = find_buffer(table_id, pagenum);
-        memcpy(cur_buf->frame, src, PAGE_SIZE);
-        cur_buf->is_dirty = true;
-        cur_buf->is_pinned++;
-
-        // move to front
-        move_to_head(cur_buf);
-    }
+    // TODO
+    // 1. implement write function.
 }
+
+/* IMPORTANT */
+/* BELOW FUNCTIONS SHOULD BE MODFIED */
+/* HEADER SHOULD BE SYNCHRONIZED WITH FILE */
 
 void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
-    // TODO
-    // 1. implement here
+    if(is_buffer_exist(table_id, pagenum)) {
+        buffer_t* cur_buf = find_buffer(table_id, pagenum);
+        int64_t key = convert_pair_to_key(cur_buf->table_id, cur_buf->pagenum);
+        hash_pointer.erase(key);
+    
+        // delete buffer
+        cur_buf->prev->next = cur_buf->next;
+        cur_buf->next->prev = cur_buf->prev;
+        delete cur_buf;
+        cur_count--;
+    }
+
+    file_free_page(table_id, pagenum);
 }
 
 pagenum_t BufferManager::buffer_alloc_page(int64_t table_id) {
-    // TODO
-    // 1. implement here
+    pagenum_t new_pagenum = file_alloc_page(table_id);
+    return new_pagenum;
 }

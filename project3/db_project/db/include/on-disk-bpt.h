@@ -1,8 +1,9 @@
 #ifndef ON_DISK_BPT_H
 #define ON_DISK_BPT_H
 
-#include "file.h"
 #include <algorithm>
+
+#include "buffer.h"
 
 /* Util Functions */
 slotnum_t cut_leaf(page_t* leaf);
