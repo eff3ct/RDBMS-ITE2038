@@ -1,5 +1,8 @@
 #include "page.h"
 
+// TODO
+// 1. delete redundant parameter at get_next_free_page
+
 /* PAGE IO */
 // Get next free page number from page(pagenum)
 pagenum_t page_io::get_next_free_page(const page_t* page, pagenum_t pagenum) {
@@ -33,6 +36,9 @@ pagenum_t page_io::get_parent_page(const page_t* page) {
 void page_io::set_parent_page(page_t* page, pagenum_t parent_page) {
     memcpy(page->data, &parent_page, sizeof(pagenum_t));
 }
+void page_io::set_free_page_next(page_t* page, pagenum_t next_free_page) {
+    memcpy(page->data, &next_free_page, sizeof(pagenum_t));
+}
 
 /* HEADER PAGE IO */
 
@@ -52,6 +58,9 @@ void page_io::header::set_header_page(page_t* header_page, pagenum_t next_free_p
 }
 void page_io::header::set_root_page(page_t* header_page, pagenum_t root_page) {
     memcpy(header_page->data + sizeof(pagenum_t) * 3, &root_page, sizeof(pagenum_t));
+}
+void page_io::header::set_next_free_page(page_t* header_page, pagenum_t next_free_page) {
+    memcpy(header_page->data + sizeof(pagenum_t), &next_free_page, sizeof(pagenum_t));
 }
 // Get root page number.
 pagenum_t page_io::header::get_root_page(const page_t* header_page) {

@@ -30,7 +30,7 @@ slotnum_t cut_leaf(std::vector<slot_t>& slots) {
 }
 
 slotnum_t cut_internal() {
-    return INTERNAL_ORDER / 2;
+    return INTERNAL_ORDER / 2 - 1;
 }
 
 pagenum_t get_left_idx(int64_t table_id, pagenum_t parent, pagenum_t left) {
@@ -41,7 +41,6 @@ pagenum_t get_left_idx(int64_t table_id, pagenum_t parent, pagenum_t left) {
     for(pagenum_t i = 0; i < num_keys + 1; ++i) {
         pagenum_t child = page_io::internal::get_child((page_t*)parent_page->frame, i);
         if(child == left) {
-            buffer_manager.unpin_buffer(table_id, parent);
             left_idx = i;
             break;
         }
@@ -52,18 +51,22 @@ pagenum_t get_left_idx(int64_t table_id, pagenum_t parent, pagenum_t left) {
 }
 
 pagenum_t get_neighbor_idx(int64_t table_id, pagenum_t node) {
-    page_t node_page;
-    file_read_page(table_id, node, &node_page);
-    pagenum_t parent = page_io::get_parent_page(&node_page);
-    page_t parent_page;
-    file_read_page(table_id, parent, &parent_page);
+    buffer_t* node_page = buffer_manager.buffer_read_page(table_id, node);
+    pagenum_t parent = page_io::get_parent_page((page_t*)node_page->frame);
+    buffer_manager.unpin_buffer(table_id, node);
 
-    uint64_t num_keys = page_io::get_key_count(&parent_page);
+    buffer_t* parent_page = buffer_manager.buffer_read_page(table_id, parent);
+
+    uint64_t num_keys = page_io::get_key_count((page_t*)parent_page->frame);
     for(int i = 0; i < num_keys + 1; ++i) {
-        pagenum_t child = page_io::internal::get_child(&parent_page, i);
-        if(child == node) return i - 1;
+        pagenum_t child = page_io::internal::get_child((page_t*)parent_page->frame, i);
+        if(child == node) {
+            buffer_manager.unpin_buffer(table_id, parent);
+            return i - 1;
+        }
     }
 
+    buffer_manager.unpin_buffer(table_id, parent);
     exit(EXIT_FAILURE);
 }
 
@@ -75,7 +78,10 @@ pagenum_t find_leaf(int64_t table_id, pagenum_t root, int64_t key) {
     while(true) {
         buffer_t* temp_page = buffer_manager.buffer_read_page(table_id, c);
 
-        if(page_io::is_leaf((page_t*)temp_page->frame)) break;
+        if(page_io::is_leaf((page_t*)temp_page->frame)) {
+            buffer_manager.unpin_buffer(table_id, c);
+            break;
+        }
 
         pagenum_t num_keys = page_io::get_key_count((page_t*)temp_page->frame);
         slotnum_t i = 0;
@@ -194,6 +200,7 @@ pagenum_t start_new_tree(int64_t table_id, int64_t key, const char* value, uint1
     buffer_t* header = buffer_manager.buffer_read_page(table_id, 0);
     buffer_manager.buffer_write_page(table_id, 0);
     page_io::header::set_root_page((page_t*)header->frame, root);
+    buffer_manager.unpin_buffer(table_id, 0);
 
     slotnum_t offset = (slotnum_t)(PAGE_SIZE - size);
     
@@ -206,8 +213,6 @@ pagenum_t start_new_tree(int64_t table_id, int64_t key, const char* value, uint1
     page_io::leaf::set_record((page_t*)root_page->frame, offset, value, size);
     page_io::leaf::update_free_space((page_t*)root_page->frame, size + SLOT_SIZE);
     page_io::set_key_count((page_t*)root_page->frame, 1);
-
-    buffer_manager.unpin_buffer(table_id, 0);
     buffer_manager.unpin_buffer(table_id, root);
     
     return root;
@@ -284,10 +289,10 @@ pagenum_t insert_into_leaf_after_splitting(int64_t table_id, pagenum_t root, pag
     pagenum_t parent = page_io::get_parent_page((page_t*)leaf_page->frame);
     page_io::set_parent_page((page_t*)new_leaf_page->frame, parent);
 
+    int64_t new_key = page_io::leaf::get_key((page_t*)new_leaf_page->frame, 0);
+
     buffer_manager.unpin_buffer(table_id, leaf);
     buffer_manager.unpin_buffer(table_id, new_leaf);
-
-    int64_t new_key = page_io::leaf::get_key((page_t*)new_leaf_page->frame, 0);
 
     return insert_into_parent(table_id, root, leaf, new_key, new_leaf);
 }
@@ -334,7 +339,7 @@ pagenum_t insert_into_node_after_splitting(int64_t table_id, pagenum_t root, pag
     page_io::internal::set_child((page_t*)new_node_page->frame, j, temp_childs[i]);
     page_io::set_key_count((page_t*)new_node_page->frame, INTERNAL_ORDER - split);
 
-    pagenum_t parent = page_io::get_parent_page((page_t*)new_node_page->frame);
+    pagenum_t parent = page_io::get_parent_page((page_t*)old_node_page->frame);
     page_io::set_parent_page((page_t*)new_node_page->frame, parent);
     num_keys = page_io::get_key_count((page_t*)new_node_page->frame);
 
@@ -467,275 +472,292 @@ pagenum_t insert(int64_t table_id, pagenum_t root, int64_t key, const char* valu
 pagenum_t adjust_root(int64_t table_id, pagenum_t root) {
     pagenum_t new_root;
 
-    page_t root_page;
-    file_read_page(table_id, root, &root_page);
-    uint32_t num_keys = page_io::get_key_count(&root_page);
+    buffer_t* root_page = buffer_manager.buffer_read_page(table_id, root);
+    uint32_t num_keys = page_io::get_key_count((page_t*)root_page->frame);
 
-    if(num_keys > 0) return root;
+    if(num_keys > 0) {
+        buffer_manager.unpin_buffer(table_id, root);
+        return root;
+    }
     
-    bool is_leaf = page_io::is_leaf(&root_page);
+    bool is_leaf = page_io::is_leaf((page_t*)root_page->frame);
     if(!is_leaf) {
-        new_root = page_io::internal::get_child(&root_page, 0);
-        page_t new_root_page;
-        file_read_page(table_id, new_root, &new_root_page);
-        page_io::set_parent_page(&new_root_page, 0);
-        file_write_page(table_id, new_root, &new_root_page);
+        new_root = page_io::internal::get_child((page_t*)root_page->frame, 0);
 
-        page_t header_page;
-        file_read_page(table_id, 0, &header_page);
-        page_io::header::set_root_page(&header_page, new_root);
-        file_write_page(table_id, 0, &header_page);
+        buffer_t* new_root_page = buffer_manager.buffer_read_page(table_id, new_root);
+        buffer_manager.buffer_write_page(table_id, new_root);
+        page_io::set_parent_page((page_t*)new_root_page->frame, 0);
+        buffer_manager.unpin_buffer(table_id, new_root);
+
+        buffer_t* header_page = buffer_manager.buffer_read_page(table_id, 0);
+        buffer_manager.buffer_write_page(table_id, 0);
+        page_io::header::set_root_page((page_t*)header_page->frame, new_root);
+        buffer_manager.unpin_buffer(table_id, 0);
     }
     else {
         new_root = 0;
-        page_t header_page;
-        file_read_page(table_id, 0, &header_page);
-        page_io::header::set_root_page(&header_page, 0);
-        file_write_page(table_id, 0, &header_page);
+
+        buffer_t* header_page = buffer_manager.buffer_read_page(table_id, 0);
+        page_io::header::set_root_page((page_t*)header_page->frame, 0);
+        buffer_manager.unpin_buffer(table_id, 0);
     }
 
-    file_free_page(table_id, root);
+    buffer_manager.unpin_buffer(table_id, root);
+    buffer_manager.buffer_free_page(table_id, root);
     
     return new_root;
 }
 
 pagenum_t remove_entry_from_node(int64_t table_id, int64_t key, pagenum_t node) {
     /* Remove the key and record(if node is leaf) from the node. */
-    page_t node_page;
-    file_read_page(table_id, node, &node_page);
-    bool is_leaf = page_io::is_leaf(&node_page);
+    buffer_t* node_page = buffer_manager.buffer_read_page(table_id, node);
+    bool is_leaf = page_io::is_leaf((page_t*)node_page->frame);
 
     /* Case : Internal node. */
     if(!is_leaf) {
         pagenum_t i = 0;
         while(true) {
-            int64_t temp_key = page_io::internal::get_key(&node_page, i);
+            int64_t temp_key = page_io::internal::get_key((page_t*)node_page->frame, i);
             if(temp_key == key) break;
             i++;
         }
 
+        buffer_manager.buffer_write_page(table_id, node);
         pagenum_t j = i;
-        pagenum_t num_keys = page_io::get_key_count(&node_page);
+        pagenum_t num_keys = page_io::get_key_count((page_t*)node_page->frame);
         for(++i; i < num_keys; ++i) {
-            int64_t temp_key = page_io::internal::get_key(&node_page, i);
-            page_io::internal::set_key(&node_page, i - 1, temp_key);
+            int64_t temp_key = page_io::internal::get_key((page_t*)node_page->frame, i);
+            page_io::internal::set_key((page_t*)node_page->frame, i - 1, temp_key);
         }
 
         for(++j; j < num_keys + 1; ++j) {
-            pagenum_t temp_child = page_io::internal::get_child(&node_page, j);
-            page_io::internal::set_child(&node_page, j - 1, temp_child);
+            pagenum_t temp_child = page_io::internal::get_child((page_t*)node_page->frame, j);
+            page_io::internal::set_child((page_t*)node_page->frame, j - 1, temp_child);
         }
 
-        num_keys = page_io::get_key_count(&node_page);
-        page_io::set_key_count(&node_page, num_keys - 1);
+        num_keys = page_io::get_key_count((page_t*)node_page->frame);
+        page_io::set_key_count((page_t*)node_page->frame, num_keys - 1);
 
-        file_write_page(table_id, node, &node_page);
+        buffer_manager.unpin_buffer(table_id, node);
     }
     /* Case : leaf node */
     else {
         pagenum_t i = 0;
         while(true) {
-            int64_t temp_key = page_io::leaf::get_key(&node_page, i);
+            int64_t temp_key = page_io::leaf::get_key((page_t*)node_page->frame, i);
             if(temp_key == key) break;
             i++;
         }
 
-        slotnum_t offset = (i == 0) ? PAGE_SIZE : page_io::leaf::get_offset(&node_page, i - 1); 
-        pagenum_t num_keys = page_io::get_key_count(&node_page);
+        buffer_manager.buffer_write_page(table_id, node);
+        slotnum_t offset = (i == 0) ? PAGE_SIZE : page_io::leaf::get_offset((page_t*)node_page->frame, i - 1); 
+        pagenum_t num_keys = page_io::get_key_count((page_t*)node_page->frame);
         for(++i; i < num_keys; ++i) {            
-            slotnum_t temp_offset = page_io::leaf::get_offset(&node_page, i);
-            slotnum_t size = page_io::leaf::get_record_size(&node_page, i);
+            slotnum_t temp_offset = page_io::leaf::get_offset((page_t*)node_page->frame, i);
+            slotnum_t size = page_io::leaf::get_record_size((page_t*)node_page->frame, i);
 
             char* temp_record = new char[size];
-            page_io::leaf::get_record(&node_page, temp_offset, temp_record, size);
+            page_io::leaf::get_record((page_t*)node_page->frame, temp_offset, temp_record, size);
     
             slot_t temp_slot;
-            slot_io::read_slot(&node_page, i, &temp_slot);
+            slot_io::read_slot((page_t*)node_page->frame, i, &temp_slot);
             offset -= size;
             slot_io::set_offset(&temp_slot, offset);
-            page_io::leaf::set_slot(&node_page, i - 1, &temp_slot);
+            page_io::leaf::set_slot((page_t*)node_page->frame, i - 1, &temp_slot);
             
-            page_io::leaf::set_record(&node_page, offset, temp_record, size);
+            page_io::leaf::set_record((page_t*)node_page->frame, offset, temp_record, size);
             delete[] temp_record;
         }
 
-        num_keys = page_io::get_key_count(&node_page);
-        page_io::set_key_count(&node_page, num_keys - 1);
+        num_keys = page_io::get_key_count((page_t*)node_page->frame);
+        page_io::set_key_count((page_t*)node_page->frame, num_keys - 1);
 
-        file_write_page(table_id, node, &node_page);
+        buffer_manager.unpin_buffer(table_id, node);
     }
 
     return node;    
 }
 
 pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, pagenum_t neighbor, pagenum_t neighbor_idx, pagenum_t prime_key_idx, int64_t prime_key) {
-    page_t node_page, neighbor_page;
-    file_read_page(table_id, node, &node_page);
-    bool is_leaf = page_io::is_leaf(&node_page);
+    buffer_t* neighbor_page;
+    buffer_t* node_page = buffer_manager.buffer_read_page(table_id, node);
+    bool is_leaf = page_io::is_leaf((page_t*)node_page->frame);
     
     /* neighbor is not on the extreme */
     if(neighbor_idx != -1) {
-        pagenum_t num_keys = page_io::get_key_count(&node_page);
+        buffer_manager.buffer_write_page(table_id, node);
+        pagenum_t num_keys = page_io::get_key_count((page_t*)node_page->frame);
         if(!is_leaf) {
-            pagenum_t temp_child = page_io::internal::get_child(&node_page, num_keys);
-            page_io::internal::set_child(&node_page, num_keys + 1, temp_child);
+            pagenum_t temp_child = page_io::internal::get_child((page_t*)node_page->frame, num_keys);
+            page_io::internal::set_child((page_t*)node_page->frame, num_keys + 1, temp_child);
             for(pagenum_t i = num_keys; i > 0; --i) {
-                int64_t temp_key = page_io::internal::get_key(&node_page, i - 1);
-                page_io::internal::set_key(&node_page, i, temp_key);
-                pagenum_t child = page_io::internal::get_child(&node_page, i - 1);
-                page_io::internal::set_child(&node_page, i, child);
+                int64_t temp_key = page_io::internal::get_key((page_t*)node_page->frame, i - 1);
+                page_io::internal::set_key((page_t*)node_page->frame, i, temp_key);
+                pagenum_t child = page_io::internal::get_child((page_t*)node_page->frame, i - 1);
+                page_io::internal::set_child((page_t*)node_page->frame, i, child);
             }
 
-            file_read_page(table_id, neighbor, &neighbor_page);
-            pagenum_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
-            pagenum_t child = page_io::internal::get_child(&neighbor_page, neighbor_num_keys);
-            page_io::internal::set_child(&node_page, 0, child);
+            neighbor_page = buffer_manager.buffer_read_page(table_id, neighbor);
+            pagenum_t neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
+            pagenum_t child = page_io::internal::get_child((page_t*)neighbor_page->frame, neighbor_num_keys);
+            page_io::internal::set_child((page_t*)node_page, 0, child);
 
-            temp_child = page_io::internal::get_child(&node_page, 0);
-            page_t temp_child_page;
-            file_read_page(table_id, temp_child, &temp_child_page);
-            page_io::set_parent_page(&temp_child_page, node);
-            file_write_page(table_id, temp_child, &temp_child_page);
+            temp_child = page_io::internal::get_child((page_t*)node_page->frame, 0);
 
-            page_io::internal::set_key(&node_page, 0, prime_key);
+            buffer_t* temp_child_page = buffer_manager.buffer_read_page(table_id, temp_child);
+            buffer_manager.buffer_write_page(table_id, temp_child);
+            page_io::set_parent_page((page_t*)temp_child_page->frame, node);
+            buffer_manager.unpin_buffer(table_id, temp_child);
 
-            page_t parent_page;
-            pagenum_t parent = page_io::get_parent_page(&node_page);
-            file_read_page(table_id, parent, &parent_page);
-            int64_t next_key = page_io::internal::get_key(&neighbor_page, neighbor_num_keys - 1);
-            page_io::internal::set_key(&parent_page, prime_key_idx, next_key);
-            file_write_page(table_id, parent, &parent_page);
+            page_io::internal::set_key((page_t*)node_page->frame, 0, prime_key);
+
+            pagenum_t parent = page_io::get_parent_page((page_t*)node_page->frame);
+            buffer_t* parent_page = buffer_manager.buffer_read_page(table_id, parent);
+            int64_t next_key = page_io::internal::get_key((page_t*)neighbor_page->frame, neighbor_num_keys - 1);
+
+            buffer_manager.buffer_write_page(table_id, parent);
+            page_io::internal::set_key((page_t*)parent_page->frame, prime_key_idx, next_key);
+            buffer_manager.unpin_buffer(table_id, parent);
         }
         else {
             std::vector<comparison_struct> slots(num_keys + 1);
             for(pagenum_t i = 0; i < num_keys; ++i) {
-                slot_io::read_slot(&node_page, i, &slots[i + 1].slot);
+                slot_io::read_slot((page_t*)node_page->frame, i, &slots[i + 1].slot);
                 slotnum_t offset = slot_io::get_offset(&slots[i + 1].slot);
                 slotnum_t cur_size = slot_io::get_record_size(&slots[i + 1].slot);
                 char* temp_record = new char[cur_size];
-                page_io::leaf::get_record(&node_page, offset, temp_record, cur_size);
+                page_io::leaf::get_record((page_t*)node_page->frame, offset, temp_record, cur_size);
                 slots[i + 1].record = std::string(temp_record, cur_size);
                 delete[] temp_record;
             }
-            file_read_page(table_id, neighbor, &neighbor_page);
-            slot_io::read_slot(&neighbor_page, num_keys, &slots[0].slot);
+            neighbor_page = buffer_manager.buffer_read_page(table_id, neighbor);
+            slot_io::read_slot((page_t*)neighbor_page->frame, num_keys, &slots[0].slot);
             slotnum_t offset = slot_io::get_offset(&slots[0].slot);
             slotnum_t cur_size = slot_io::get_record_size(&slots[0].slot);
             char* temp_record = new char[cur_size];
-            page_io::leaf::get_record(&neighbor_page, offset, temp_record, cur_size);
+            page_io::leaf::get_record((page_t*)neighbor_page->frame, offset, temp_record, cur_size);
             slots[0].record = std::string(temp_record, cur_size);
             delete[] temp_record;
 
-            page_io::leaf::update_free_space(&neighbor_page, -(cur_size + SLOT_SIZE));
-
-            page_io::leaf::set_free_space(&node_page, INITIAL_FREE_SPACE);
+            buffer_manager.buffer_write_page(table_id, neighbor);
+            page_io::leaf::update_free_space((page_t*)neighbor_page->frame, -(cur_size + SLOT_SIZE));
+            page_io::leaf::set_free_space((page_t*)node_page->frame, INITIAL_FREE_SPACE);
             offset = PAGE_SIZE;
             for(pagenum_t i = 0; i < num_keys + 1; ++i) {
                 offset -= slot_io::get_record_size(&slots[i].slot);
                 slot_io::set_offset(&slots[i].slot, offset);
-                page_io::leaf::set_slot(&node_page, i, &slots[i].slot);
-                page_io::leaf::set_record(&node_page, offset, slots[i].record.c_str(), slots[i].record.size());
-                page_io::leaf::update_free_space(&node_page, slots[i].record.size() + SLOT_SIZE);
+                page_io::leaf::set_slot((page_t*)node_page->frame, i, &slots[i].slot);
+                page_io::leaf::set_record((page_t*)node_page->frame, offset, slots[i].record.c_str(), slots[i].record.size());
+                page_io::leaf::update_free_space((page_t*)node_page->frame, slots[i].record.size() + SLOT_SIZE);
             }
 
-            pagenum_t parent = page_io::get_parent_page(&node_page);
-            page_t parent_page;
-            file_read_page(table_id, parent, &parent_page);
-            int64_t next_key = page_io::leaf::get_key(&node_page, 0);
-            page_io::internal::set_key(&parent_page, prime_key_idx, next_key);
-            file_write_page(table_id, parent, &parent_page);
+            pagenum_t parent = page_io::get_parent_page((page_t*)node_page->frame);
+            buffer_t* parent_page = buffer_manager.buffer_read_page(table_id, parent);
+            int64_t next_key = page_io::leaf::get_key((page_t*)node_page->frame, 0);
+            buffer_manager.buffer_write_page(table_id, parent);
+            page_io::internal::set_key((page_t*)parent_page, prime_key_idx, next_key);
+            buffer_manager.unpin_buffer(table_id, parent);
         }
     }
     /* neighbor is on the extreme */
     else {
-        pagenum_t num_keys = page_io::get_key_count(&node_page);
+        pagenum_t num_keys = page_io::get_key_count((page_t*)node_page->frame);
         if(!is_leaf) {
-            page_io::internal::set_key(&node_page, num_keys, prime_key);
-            pagenum_t child = page_io::internal::get_child(&neighbor_page, 0);
-            page_io::internal::set_child(&node_page, num_keys + 1, child);
+            buffer_manager.buffer_write_page(table_id, node);
+            page_io::internal::set_key((page_t*)node_page->frame, num_keys, prime_key);
+            
+            neighbor_page = buffer_manager.buffer_read_page(table_id, neighbor);
+            pagenum_t child = page_io::internal::get_child((page_t*)neighbor_page->frame, 0);
+            page_io::internal::set_child((page_t*)node_page->frame, num_keys + 1, child);
 
-            page_t child_page;
-            file_read_page(table_id, child, &child_page);
-            page_io::set_parent_page(&child_page, node);
-            file_write_page(table_id, child, &child_page);
+            buffer_t* child_page = buffer_manager.buffer_read_page(table_id, child);
+            buffer_manager.buffer_write_page(table_id, child);
+            page_io::set_parent_page((page_t*)child_page->frame, node);
+            buffer_manager.unpin_buffer(table_id, child);
 
-            page_t parent_page;
-            pagenum_t parent = page_io::get_parent_page(&node_page);
-            file_read_page(table_id, parent, &parent_page);
-            int64_t next_key = page_io::internal::get_key(&neighbor_page, 0);
-            page_io::internal::set_key(&parent_page, prime_key_idx, next_key);
-            file_write_page(table_id, parent, &parent_page);
+            pagenum_t parent = page_io::get_parent_page((page_t*)node_page->frame);
+            buffer_t* parent_page = buffer_manager.buffer_read_page(table_id, parent);
+            int64_t next_key = page_io::internal::get_key((page_t*)neighbor_page->frame, 0);
+            
+            buffer_manager.buffer_write_page(table_id, parent);
+            page_io::internal::set_key((page_t*)parent_page->frame, prime_key_idx, next_key);
+            buffer_manager.unpin_buffer(table_id, parent);
 
             /* Shift key and child */
-            pagenum_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+            pagenum_t neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
             pagenum_t i;
             for(i = 0; i < neighbor_num_keys - 1; ++i) {
-                int64_t temp_key = page_io::internal::get_key(&neighbor_page, i + 1);
-                page_io::internal::set_key(&neighbor_page, i, temp_key);
-                pagenum_t temp_child = page_io::internal::get_child(&neighbor_page, i + 1);
-                page_io::internal::set_child(&neighbor_page, i, temp_child);
+                int64_t temp_key = page_io::internal::get_key((page_t*)neighbor_page->frame, i + 1);
+                page_io::internal::set_key((page_t*)neighbor_page->frame, i, temp_key);
+                pagenum_t temp_child = page_io::internal::get_child((page_t*)neighbor_page->frame, i + 1);
+                page_io::internal::set_child((page_t*)neighbor_page->frame, i, temp_child);
             }
-            pagenum_t temp_child = page_io::internal::get_child(&neighbor_page, i + 1);
-            page_io::internal::set_child(&neighbor_page, i, temp_child);
+            pagenum_t temp_child = page_io::internal::get_child((page_t*)neighbor_page->frame, i + 1);
+            page_io::internal::set_child((page_t*)neighbor_page->frame, i, temp_child);
         }   
         else {
-            slotnum_t offset = page_io::leaf::get_offset(&node_page, num_keys - 1);
+            slotnum_t offset = page_io::leaf::get_offset((page_t*)node_page->frame, num_keys - 1);
 
-            file_read_page(table_id, neighbor, &neighbor_page);
+            neighbor_page = buffer_manager.buffer_read_page(table_id, neighbor);
+            
             slot_t neighbor_slot;
-            slot_io::read_slot(&neighbor_page, 0, &neighbor_slot);
+            slot_io::read_slot((page_t*)neighbor_page->frame, 0, &neighbor_slot);
             slotnum_t neighbor_offset = slot_io::get_offset(&neighbor_slot);
             slotnum_t neighbor_size = slot_io::get_record_size(&neighbor_slot);
             char* temp_record = new char[neighbor_size];
-            page_io::leaf::get_record(&neighbor_page, neighbor_offset, temp_record, neighbor_size);
+            page_io::leaf::get_record((page_t*)neighbor_page->frame, neighbor_offset, temp_record, neighbor_size);
 
+            buffer_manager.buffer_write_page(table_id, node);
             slot_io::set_offset(&neighbor_slot, offset - neighbor_size);
-            page_io::leaf::set_slot(&node_page, num_keys, &neighbor_slot);
-            page_io::leaf::set_record(&node_page, offset - neighbor_size, temp_record, neighbor_size);
+            page_io::leaf::set_slot((page_t*)node_page->frame, num_keys, &neighbor_slot);
+            page_io::leaf::set_record((page_t*)node_page->frame, offset - neighbor_size, temp_record, neighbor_size);
             delete[] temp_record;
 
-            page_io::leaf::update_free_space(&node_page, neighbor_size + SLOT_SIZE);
-            page_io::leaf::update_free_space(&neighbor_page, -(neighbor_size + SLOT_SIZE));
+            buffer_manager.buffer_write_page(table_id, neighbor);
+            page_io::leaf::update_free_space((page_t*)node_page->frame, neighbor_size + SLOT_SIZE);
+            page_io::leaf::update_free_space((page_t*)neighbor_page->frame, -(neighbor_size + SLOT_SIZE));
 
-            page_t parent_page;
-            pagenum_t parent = page_io::get_parent_page(&node_page);
-            file_read_page(table_id, parent, &parent_page);
-            int64_t next_key = page_io::leaf::get_key(&neighbor_page, 1);
-            page_io::internal::set_key(&parent_page, prime_key_idx, next_key);
-            file_write_page(table_id, parent, &parent_page);
+            pagenum_t parent = page_io::get_parent_page((page_t*)node_page->frame);
+
+            buffer_t* parent_page = buffer_manager.buffer_read_page(table_id, parent);
+            int64_t next_key = page_io::leaf::get_key((page_t*)neighbor_page->frame, 1);
+            buffer_manager.buffer_write_page(table_id, parent);
+            page_io::internal::set_key((page_t*)parent_page->frame, prime_key_idx, next_key);
+            buffer_manager.unpin_buffer(table_id, parent);
 
             /* Shift key and child */
             std::vector<comparison_struct> slots;
-            pagenum_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+            pagenum_t neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
             for(pagenum_t i = 0; i < neighbor_num_keys - 1; ++i) {
                 comparison_struct temp;
-                slot_io::read_slot(&neighbor_page, i + 1, &temp.slot);
+                slot_io::read_slot((page_t*)neighbor_page->frame, i + 1, &temp.slot);
                 temp_record = new char[slot_io::get_record_size(&temp.slot)];
                 offset = slot_io::get_offset(&temp.slot);
-                page_io::leaf::get_record(&neighbor_page, offset, temp_record, slot_io::get_record_size(&temp.slot));
+                page_io::leaf::get_record((page_t*)neighbor_page->frame, offset, temp_record, slot_io::get_record_size(&temp.slot));
                 temp.record = std::string(temp_record, slot_io::get_record_size(&temp.slot));
                 slots.push_back(temp);
                 delete[] temp_record;
             }
 
-            page_io::leaf::set_free_space(&neighbor_page, INITIAL_FREE_SPACE);
+            page_io::leaf::set_free_space((page_t*)neighbor_page->frame, INITIAL_FREE_SPACE);
             offset = PAGE_SIZE;
             for(pagenum_t i = 0; i < neighbor_num_keys - 1; ++i) {
                 offset -= slot_io::get_record_size(&slots[i].slot);
                 slot_io::set_offset(&slots[i].slot, offset);
-                page_io::leaf::set_slot(&neighbor_page, i, &slots[i].slot);
-                page_io::leaf::set_record(&neighbor_page, offset, slots[i].record.c_str(), slots[i].record.size());
-                page_io::leaf::update_free_space(&neighbor_page, slot_io::get_record_size(&slots[i].slot) + SLOT_SIZE);
+                page_io::leaf::set_slot((page_t*)neighbor_page->frame, i, &slots[i].slot);
+                page_io::leaf::set_record((page_t*)neighbor_page->frame, offset, slots[i].record.c_str(), slots[i].record.size());
+                page_io::leaf::update_free_space((page_t*)neighbor_page->frame, slot_io::get_record_size(&slots[i].slot) + SLOT_SIZE);
             }
         }
     }
 
-    pagenum_t node_num_keys = page_io::get_key_count(&node_page);
-    pagenum_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
-    page_io::set_key_count(&node_page, node_num_keys + 1);
-    page_io::set_key_count(&neighbor_page, neighbor_num_keys - 1);
-    file_write_page(table_id, node, &node_page);
-    file_write_page(table_id, neighbor, &neighbor_page);
+    pagenum_t node_num_keys = page_io::get_key_count((page_t*)node_page->frame);
+    pagenum_t neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
+    page_io::set_key_count((page_t*)node_page->frame, node_num_keys + 1);
+    page_io::set_key_count((page_t*)neighbor_page->frame, neighbor_num_keys - 1);
+
+    buffer_manager.unpin_buffer(table_id, neighbor);
+    buffer_manager.unpin_buffer(table_id, node);
 
     return root;
 }
@@ -743,83 +765,88 @@ pagenum_t redistribute_nodes(int64_t table_id, pagenum_t root, pagenum_t node, p
 pagenum_t merge_nodes(int64_t table_id, pagenum_t root, pagenum_t node, pagenum_t neighbor, pagenum_t neighbor_idx, int64_t prime_key) {
     if(neighbor_idx == -1) std::swap(node, neighbor);
 
-    page_t neighbor_page;
-    file_read_page(table_id, neighbor, &neighbor_page);
-    
-    pagenum_t neighbor_insertion_idx = page_io::get_key_count(&neighbor_page);
+    buffer_t* neighbor_page = buffer_manager.buffer_read_page(table_id, neighbor);
+    pagenum_t neighbor_insertion_idx = page_io::get_key_count((page_t*)neighbor_page->frame);
 
-    page_t node_page;
-    file_read_page(table_id, node, &node_page);
-    bool is_leaf = page_io::is_leaf(&node_page);
+    buffer_t* node_page = buffer_manager.buffer_read_page(table_id, node);
+    bool is_leaf = page_io::is_leaf((page_t*)node_page->frame);
 
     if(!is_leaf) {
         pagenum_t neighbor_num_keys, node_num_keys;
 
-        page_io::internal::set_key(&neighbor_page, neighbor_insertion_idx, prime_key);
-        neighbor_num_keys = page_io::get_key_count(&neighbor_page);
-        page_io::set_key_count(&neighbor_page, neighbor_num_keys + 1);
+        buffer_manager.buffer_write_page(table_id, neighbor);
+        page_io::internal::set_key((page_t*)neighbor_page->frame, neighbor_insertion_idx, prime_key);
+        neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
+        page_io::set_key_count((page_t*)neighbor_page->frame, neighbor_num_keys + 1);
         
+        buffer_manager.buffer_write_page(table_id, node);
         pagenum_t i, j;
-        pagenum_t node_end = page_io::get_key_count(&node_page);
+        pagenum_t node_end = page_io::get_key_count((page_t*)node_page->frame);
         for(i = neighbor_insertion_idx + 1, j = 0; j < node_end; ++i, ++j) {
-            pagenum_t temp_child = page_io::internal::get_child(&node_page, j);
-            page_io::internal::set_child(&neighbor_page, i, temp_child);
-            int64_t temp_key = page_io::internal::get_key(&node_page, j);
-            page_io::internal::set_key(&neighbor_page, i, temp_key);
+            pagenum_t temp_child = page_io::internal::get_child((page_t*)node_page->frame, j);
+            page_io::internal::set_child((page_t*)neighbor_page->frame, i, temp_child);
+            int64_t temp_key = page_io::internal::get_key((page_t*)node_page->frame, j);
+            page_io::internal::set_key((page_t*)neighbor_page->frame, i, temp_key);
 
             /* update key count */
-            neighbor_num_keys = page_io::get_key_count(&neighbor_page);
-            node_num_keys = page_io::get_key_count(&node_page);
-            page_io::set_key_count(&neighbor_page, neighbor_num_keys + 1);
-            page_io::set_key_count(&node_page, node_num_keys - 1);
+            neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
+            node_num_keys = page_io::get_key_count((page_t*)node_page->frame);
+            page_io::set_key_count((page_t*)neighbor_page->frame, neighbor_num_keys + 1);
+            page_io::set_key_count((page_t*)node_page->frame, node_num_keys - 1);
         }
-        pagenum_t temp_child = page_io::internal::get_child(&node_page, j);
-        page_io::internal::set_child(&neighbor_page, i, temp_child);
+        pagenum_t temp_child = page_io::internal::get_child((page_t*)node_page->frame, j);
+        page_io::internal::set_child((page_t*)neighbor_page->frame, i, temp_child);
 
-        neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+        neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
         for(pagenum_t i = 0; i < neighbor_num_keys + 1; ++i) {
-            pagenum_t child = page_io::internal::get_child(&neighbor_page, i);
-            page_t child_page;
-            file_read_page(table_id, child, &child_page);
-            page_io::set_parent_page(&child_page, neighbor);
-            file_write_page(table_id, child, &child_page);
+            pagenum_t child = page_io::internal::get_child((page_t*)neighbor_page->frame, i);
+            
+            buffer_t* child_page = buffer_manager.buffer_read_page(table_id, child);
+            buffer_manager.buffer_write_page(table_id, child);
+            page_io::set_parent_page((page_t*)child_page->frame, neighbor);
+            buffer_manager.unpin_buffer(table_id, child);
         }
 
-        file_write_page(table_id, neighbor, &neighbor_page);
+        buffer_manager.unpin_buffer(table_id, neighbor);  
     }
     else {
         /* Leaf node merge */
-        pagenum_t num_keys = page_io::get_key_count(&node_page);
-        slotnum_t offset = page_io::leaf::get_offset(&neighbor_page, neighbor_insertion_idx - 1);
+        pagenum_t num_keys = page_io::get_key_count((page_t*)node_page->frame);
+        slotnum_t offset = page_io::leaf::get_offset((page_t*)neighbor_page->frame, neighbor_insertion_idx - 1);
+        
+        buffer_manager.buffer_write_page(table_id, neighbor);
+        buffer_manager.buffer_write_page(table_id, node);
         for(pagenum_t i = neighbor_insertion_idx, j = 0; j < num_keys; ++i, ++j) {
             slot_t temp_slot;
-            slot_io::read_slot(&node_page, j, &temp_slot);
+            slot_io::read_slot((page_t*)node_page->frame, j, &temp_slot);
             slotnum_t size = slot_io::get_record_size(&temp_slot);
             offset -= size;
             slot_io::set_offset(&temp_slot, offset);
-            page_io::leaf::set_slot(&neighbor_page, i, &temp_slot);
+            page_io::leaf::set_slot((page_t*)neighbor_page->frame, i, &temp_slot);
 
             char* temp_record = new char[size];
             slotnum_t temp_offset = slot_io::get_offset(&temp_slot);
-            page_io::leaf::get_record(&node_page, temp_offset, temp_record, size);
-            page_io::leaf::set_record(&neighbor_page, offset, temp_record, size);
+            page_io::leaf::get_record((page_t*)node_page->frame, temp_offset, temp_record, size);
+            page_io::leaf::set_record((page_t*)neighbor_page->frame, offset, temp_record, size);
             delete[] temp_record;
 
             /* update key count */
-            pagenum_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
-            page_io::set_key_count(&neighbor_page, neighbor_num_keys + 1);
-            page_io::leaf::update_free_space(&neighbor_page, size + SLOT_SIZE);
+            pagenum_t neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
+            page_io::set_key_count((page_t*)neighbor_page->frame, neighbor_num_keys + 1);
+            page_io::leaf::update_free_space((page_t*)neighbor_page->frame, size + SLOT_SIZE);
         }
 
-        pagenum_t right_sibling = page_io::leaf::get_right_sibling(&node_page);
-        page_io::leaf::set_right_sibling(&neighbor_page, right_sibling);
+        pagenum_t right_sibling = page_io::leaf::get_right_sibling((page_t*)node_page->frame);
+        page_io::leaf::set_right_sibling((page_t*)neighbor_page->frame, right_sibling);
 
-        file_write_page(table_id, neighbor, &neighbor_page);
+        buffer_manager.unpin_buffer(table_id, neighbor);
     }
 
-    pagenum_t parent = page_io::get_parent_page(&node_page);
+    pagenum_t parent = page_io::get_parent_page((page_t*)node_page->frame);
+    buffer_manager.unpin_buffer(table_id, node);
+
     root = delete_entry(table_id, root, parent, prime_key);
-    file_free_page(table_id, node);
+    buffer_manager.buffer_free_page(table_id, node);
 
     return root;
 }
@@ -830,61 +857,78 @@ pagenum_t delete_entry(int64_t table_id, pagenum_t root, pagenum_t node, int64_t
     /* Case : Deletion from the root */
     if(node == root) return adjust_root(table_id, root);
 
-    page_t node_page;
-    file_read_page(table_id, node, &node_page);
-    uint32_t num_keys = page_io::get_key_count(&node_page);
-    bool is_leaf = page_io::is_leaf(&node_page);
+    buffer_t* node_page = buffer_manager.buffer_read_page(table_id, node);
+    uint32_t num_keys = page_io::get_key_count((page_t*)node_page->frame);
+    bool is_leaf = page_io::is_leaf((page_t*)node_page->frame);
 
     int32_t min_keys = is_leaf ? -1 : cut_internal();
     
     /* Case : node stays at or above minimum after deletion */
-    if(!is_leaf && num_keys >= min_keys) return root;
+    if(!is_leaf && num_keys >= min_keys) {
+        buffer_manager.unpin_buffer(table_id, node);
+        return root;
+    }
     else if(is_leaf) {
-        pagenum_t free_space = page_io::leaf::get_free_space(&node_page);
-        if(free_space < THRESHOLD) return root;
+        pagenum_t free_space = page_io::leaf::get_free_space((page_t*)node_page->frame);
+        if(free_space < THRESHOLD) {
+            buffer_manager.unpin_buffer(table_id, node);
+            return root;
+        }
     }
 
     pagenum_t neighbor_idx = get_neighbor_idx(table_id, node);
     pagenum_t prime_key_idx = (neighbor_idx == -1) ? 0 : neighbor_idx;
     int64_t prime_key = is_leaf 
-    ? page_io::leaf::get_key(&node_page, prime_key_idx) 
-    : page_io::internal::get_key(&node_page, prime_key_idx);
+    ? page_io::leaf::get_key((page_t*)node_page->frame, prime_key_idx) 
+    : page_io::internal::get_key((page_t*)node_page->frame, prime_key_idx);
     
-    pagenum_t parent = page_io::get_parent_page(&node_page);
-    page_t parent_page;
-    file_read_page(table_id, parent, &parent_page);
+    pagenum_t parent = page_io::get_parent_page((page_t*)node_page->frame);
+    buffer_t* parent_page = buffer_manager.buffer_read_page(table_id, parent);
 
     pagenum_t neighbor = (neighbor_idx == -1) 
-    ? page_io::internal::get_child(&parent_page, 1) 
-    : page_io::internal::get_child(&parent_page, neighbor_idx);
+    ? page_io::internal::get_child((page_t*)parent_page->frame, 1) 
+    : page_io::internal::get_child((page_t*)parent_page->frame, neighbor_idx);
 
-    page_t neighbor_page;
-    file_read_page(table_id, neighbor, &neighbor_page);
+    buffer_t* neighbor_page = buffer_manager.buffer_read_page(table_id, neighbor);
 
-    uint32_t neighbor_num_keys = page_io::get_key_count(&neighbor_page);
+    uint32_t neighbor_num_keys = page_io::get_key_count((page_t*)neighbor_page->frame);
 
     if(!is_leaf) {
+        buffer_manager.unpin_buffer(table_id, node);
+        buffer_manager.unpin_buffer(table_id, neighbor);
+        buffer_manager.unpin_buffer(table_id, parent);
+    
         if(neighbor_num_keys + num_keys < INTERNAL_ORDER - 1) return merge_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key);
         else return redistribute_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key_idx, prime_key);
     }
     else {
-        pagenum_t free_space = page_io::leaf::get_free_space(&node_page);
-        pagenum_t neighbor_free_space = page_io::leaf::get_free_space(&neighbor_page);
+        pagenum_t free_space = page_io::leaf::get_free_space((page_t*)node_page->frame);
+        pagenum_t neighbor_free_space = page_io::leaf::get_free_space((page_t*)neighbor_page->frame);
         pagenum_t merged_space = (PAGE_SIZE - PAGE_HEADER_SIZE) - free_space
         + (PAGE_SIZE - PAGE_HEADER_SIZE) - neighbor_free_space;
 
-        if(merged_space <= (PAGE_SIZE - PAGE_HEADER_SIZE)) return merge_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key);
+        if(merged_space <= (PAGE_SIZE - PAGE_HEADER_SIZE)) {
+            buffer_manager.unpin_buffer(table_id, node);
+            buffer_manager.unpin_buffer(table_id, neighbor);
+            buffer_manager.unpin_buffer(table_id, parent);
+            return merge_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key);
+        }
         else {
-            page_t node_page;
             do {
                 neighbor_idx = get_neighbor_idx(table_id, node);
                 prime_key_idx = (neighbor_idx == -1) ? 0 : neighbor_idx;
-                prime_key = page_io::leaf::get_key(&node_page, prime_key_idx);
+                prime_key = page_io::leaf::get_key((page_t*)node_page->frame, prime_key_idx);
 
                 root = redistribute_nodes(table_id, root, node, neighbor, neighbor_idx, prime_key_idx, prime_key);
-                file_read_page(table_id, node, &node_page);
+
+                node_page = buffer_manager.buffer_read_page(table_id, node);                
             }
-            while(page_io::leaf::get_free_space(&node_page) >= THRESHOLD);
+            while(page_io::leaf::get_free_space((page_t*)node_page->frame) >= THRESHOLD);
+
+            buffer_manager.unpin_buffer(table_id, node);
+            buffer_manager.unpin_buffer(table_id, neighbor);
+            buffer_manager.unpin_buffer(table_id, parent);
+
             return root;
         }
     }

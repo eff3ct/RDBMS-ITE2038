@@ -42,10 +42,12 @@ namespace page_io {
     void set_key_count(page_t* page, uint32_t key_count);
     pagenum_t get_parent_page(const page_t* page);
     void set_parent_page(page_t* page, pagenum_t parent_page);
+    void set_free_page_next(page_t* page, pagenum_t next_free_page);
 
     namespace header {
         void set_header_page(page_t* header_page, pagenum_t next_free_page, pagenum_t page_cnt, pagenum_t root_page);
         void set_root_page(page_t* header_page, pagenum_t root_page);
+        void set_next_free_page(page_t* header_page, pagenum_t next_free_page);
         pagenum_t get_root_page(const page_t* header_page);
         pagenum_t get_page_count(const page_t* header_page);
     }

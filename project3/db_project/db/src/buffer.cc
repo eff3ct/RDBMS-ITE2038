@@ -2,11 +2,14 @@
 
 BufferManager buffer_manager;
 
+int total_cnt;
+int cache_hit;
+
 buffer_t::buffer_t() {
     table_id = -1;
     pagenum = -1;
     is_dirty = false;
-    is_pinned = 0;
+    is_pinned = false;
     next = nullptr;
     prev = nullptr;
 }
@@ -96,6 +99,8 @@ BufferManager::BufferManager() {
 }
 
 BufferManager::~BufferManager() {
+    std::cout << "total cnt : " << total_cnt << std::endl;
+    std::cout << "cache hit : " << cache_hit << std::endl;
     delete buf_head;
     delete buf_tail;
 }
@@ -124,6 +129,7 @@ void BufferManager::destroy_all() {
         cur_buf = cur_buf->next;
         delete tmp;
     }
+    cur_count = 0;
     hash_pointer.clear();
     buf_head->next = buf_tail;
     buf_tail->prev = buf_head;
@@ -134,6 +140,7 @@ void BufferManager::buffer_close_table_file() {
 }
 
 buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
+    total_cnt++;
     /* cache miss */
     if(!is_buffer_exist(table_id, pagenum)) {
         /* when buffer is full */
@@ -177,6 +184,7 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
     }
     /* cache hit */
     else {
+        cache_hit++;
         buffer_t* cur_buf = find_buffer(table_id, pagenum);
         cur_buf->is_pinned = true;
 
@@ -192,9 +200,6 @@ void BufferManager::buffer_write_page(int64_t table_id, pagenum_t pagenum) {
     if(!is_buffer_exist(table_id, pagenum)) return;
     buffer_t* cur_buf = find_buffer(table_id, pagenum);
     cur_buf->is_dirty = true;
-
-    // TODO
-    // 1. implement write function.
 }
 
 /* IMPORTANT */
@@ -202,22 +207,57 @@ void BufferManager::buffer_write_page(int64_t table_id, pagenum_t pagenum) {
 /* HEADER SHOULD BE SYNCHRONIZED WITH FILE */
 
 void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
-    if(is_buffer_exist(table_id, pagenum)) {
-        buffer_t* cur_buf = find_buffer(table_id, pagenum);
-        int64_t key = convert_pair_to_key(cur_buf->table_id, cur_buf->pagenum);
-        hash_pointer.erase(key);
-    
-        // delete buffer
-        cur_buf->prev->next = cur_buf->next;
-        cur_buf->next->prev = cur_buf->prev;
-        delete cur_buf;
-        cur_count--;
+    if(!is_buffer_exist(table_id, 0)) {
+        file_free_page(table_id, pagenum);
+        return;
     }
 
-    file_free_page(table_id, pagenum);
+    buffer_t* header_buf = find_buffer(table_id, 0);
+    buffer_write_page(table_id, 0);
+
+    page_t free_page;
+    pagenum_t next_free_page_num = page_io::get_next_free_page((page_t*)header_buf->frame, 0);
+    page_io::set_free_page_next(&free_page, next_free_page_num);
+    file_write_page(table_id, pagenum, &free_page);
+
+    page_io::header::set_next_free_page((page_t*)header_buf->frame, pagenum);
+    header_buf->is_dirty = true;
 }
 
 pagenum_t BufferManager::buffer_alloc_page(int64_t table_id) {
-    pagenum_t new_pagenum = file_alloc_page(table_id);
-    return new_pagenum;
+    if(!is_buffer_exist(table_id, 0)) {
+        pagenum_t new_pagenum = file_alloc_page(table_id);
+        return new_pagenum;
+    }
+    
+    buffer_t* header_buf = find_buffer(table_id, 0);
+    buffer_write_page(table_id, 0);
+
+    pagenum_t next_free_page_num = page_io::get_next_free_page((page_t*)header_buf->frame, 0);
+    if(next_free_page_num == 0) {
+        pagenum_t page_cnt = page_io::header::get_page_count((page_t*)header_buf->frame);
+        pagenum_t curr_cnt = page_cnt * 2;
+
+        page_io::set_free_page_next((page_t*)header_buf->frame, page_cnt);
+
+        for(pagenum_t i = page_cnt; i < curr_cnt; i++) {
+            page_t free_page;
+            pagenum_t next_free_page_num = (i + 1) % curr_cnt;
+            page_io::set_free_page_next(&free_page, next_free_page_num);
+            file_write_page(table_id, i, &free_page);
+        }
+
+        pagenum_t root_page_num = page_io::header::get_root_page((page_t*)header_buf->frame);
+        page_io::header::set_header_page((page_t*)header_buf->frame, page_cnt, curr_cnt, root_page_num);
+    }
+
+    page_t free_page;
+    next_free_page_num = page_io::get_next_free_page((page_t*)header_buf->frame, 0);
+    file_read_page(table_id, next_free_page_num, &free_page);
+
+    pagenum_t header_next_free_page_num = page_io::get_next_free_page(&free_page, next_free_page_num);
+    page_io::header::set_next_free_page((page_t*)header_buf->frame, header_next_free_page_num);
+    header_buf->is_dirty = true;
+
+    return next_free_page_num;
 }

@@ -36,7 +36,7 @@ TEST(OnDiskBplusTreeTest, ScanTest) {
     if(!std::remove("scan_test.db")) std::cout << "ALERT : remove existing file.\n";
     int64_t table_id = open_table("scan_test.db");
 
-    init_db(2560);
+    init_db(64);
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
     
@@ -89,7 +89,7 @@ TEST(OnDiskBplusTreeTest, InsertionClearInsertTest) {
     if(!std::remove("clear_test.db")) std::cout << "ALERT : remove existing file.\n";
     int64_t table_id = open_table("clear_test.db");
 
-    init_db(2560);
+    init_db(64);
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
     
@@ -134,7 +134,7 @@ TEST(OnDiskBplusTreeTest, NormalInsertionTest) {
     if(!std::remove("normal_insertion_test.db")) std::cout << "ALERT : remove existing file.\n";
     int64_t table_id = open_table("normal_insertion_test.db");
 
-    init_db(2560);
+    init_db(64);
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
     
@@ -168,7 +168,7 @@ TEST(OnDiskBplusTreeTest, NormalDeletionTest) {
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
     
-    init_db(2560);
+    init_db(64);
     uint16_t record_size = 100;
     char buf[200];    
 
@@ -194,7 +194,7 @@ TEST(OnDiskBplusTreeTest, LargeInsertionTest) {
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
     
-    init_db(2560);
+    init_db(64);
     uint16_t record_size = 100;
     const char* record = get_random_string(record_size).c_str();
 
@@ -225,7 +225,7 @@ TEST(OnDiskBplusTreeTest, LargeDeletionTest) {
     EXPECT_GE(table_id, 0)
         << "open table failed.\n";
     
-    init_db(2560);
+    init_db(64);
     uint16_t record_size = 100;
     char buf[200];    
     
@@ -251,7 +251,7 @@ TEST(OnDiskBplusTreeTest, VeryLargeInsertionTest) {
     EXPECT_GE(table_id, 0)
         << "FAIL : open table failed.\n";
     
-    init_db(2560);
+    init_db(64);
     uint16_t record_size = 100;
     const char* record = get_random_string(record_size).c_str();
 
@@ -283,7 +283,7 @@ TEST(OnDiskBplusTreeTest, VeryLargeDeletionTest) {
     EXPECT_GE(table_id, 0)
         << "FAIL : open table failed.\n";
     
-    init_db(2560);
+    init_db(64);
     uint16_t record_size = 100;
     char buf[200];    
     
@@ -310,7 +310,7 @@ TEST(OnDiskBplusTreeTest, HandlesInsertionRandomRecordKey) {
     EXPECT_GE(table_id, 0)
         << "FAIL : open table failed.\n";
 
-    init_db(2560);
+    init_db(64);
     int insertion_count = 100'000;
     std::vector<int> keys(insertion_count);
     for(int i = 0; i < insertion_count; ++i) {
@@ -357,7 +357,7 @@ TEST(OnDiskBplusTreeTest, HandlesDeletionRandomRecordKey) {
     EXPECT_GE(table_id, 0)
         << "FAIL : open table failed.\n";
 
-    init_db(2560);
+    init_db(64);
     int insertion_count = 100'000;
     std::vector<int> keys(insertion_count);
     for(int i = 0; i < insertion_count; ++i) {
