@@ -20,9 +20,6 @@ struct buffer_t {
     buffer_t(int64_t table_id, pagenum_t pagenum);
 };
 
-// TODO
-// 1. fix dynamic methods to static.
-
 class BufferManager {
     /* field */
     buffer_t* buf_head;

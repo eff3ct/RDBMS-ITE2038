@@ -1,9 +1,5 @@
 #include "on-disk-bpt.h"
 
-// TODO 
-// 1. change read functions with buffer
-// 2. alloc page(make leaf, make internal) with buffer
-
 struct comparison_struct {
     slot_t slot;
     std::string record;
