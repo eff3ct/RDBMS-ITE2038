@@ -112,7 +112,7 @@ std::vector<int64_t>* keys, std::vector<char*>* values, std::vector<uint16_t>* v
 }
 
 int init_db(int num_buf) {
-    buffer_manager.set_max_count(num_buf);
+    buffer_manager.init_buf(num_buf);
     return 0;
 }
 

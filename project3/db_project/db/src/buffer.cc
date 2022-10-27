@@ -14,16 +14,12 @@ buffer_t::buffer_t() {
     prev = nullptr;
 }
 
-buffer_t::buffer_t(int64_t table_id, pagenum_t pagenum) {
-    this->table_id = table_id;
-    this->pagenum = pagenum;
-    is_dirty = false;
-    is_pinned = false;
-    next = nullptr;
-    prev = nullptr;
+/* private */
+void BufferManager::set_buf(buffer_t* buf, int64_t table_id, pagenum_t pagenum) {
+    buf->table_id = table_id;
+    buf->pagenum = pagenum;
 }
 
-/* private */
 void BufferManager::move_to_head(buffer_t* buf) {
     buf->prev->next = buf->next;
     buf->next->prev = buf->prev;
@@ -105,7 +101,13 @@ BufferManager::~BufferManager() {
     delete buf_tail;
 }
 
-void BufferManager::set_max_count(int max_count) { this->max_count = max_count; }
+void BufferManager::init_buf(int max_count) { 
+    this->cur_count = 0;
+    this->max_count = max_count;
+    buf_pool.resize(max_count);
+    for(int i = 0; i < max_count; ++i) 
+        buf_pool[i] = new buffer_t();
+}
 
 void BufferManager::unpin_buffer(int64_t table_id, pagenum_t pagenum) {
     if(!is_buffer_exist(table_id, pagenum)) return;
@@ -149,16 +151,12 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
             if(victim->is_dirty) flush_buffer(victim);
             int64_t key = convert_pair_to_key(victim->table_id, victim->pagenum);
             hash_pointer.erase(key);
-            
-            // delete victim
-            victim->prev->next = victim->next;
-            victim->next->prev = victim->prev;
-            delete victim;
 
             // insert new buffer
-            buffer_t* new_buf = new buffer_t(table_id, pagenum);
+            buffer_t* new_buf = victim;
+            set_buf(new_buf, table_id, pagenum);
             file_read_page(table_id, pagenum, (page_t*)new_buf->frame);
-            insert_into_head(new_buf);
+            move_to_head(new_buf);
             new_buf->is_pinned = true;
 
             // insert into hash
@@ -169,7 +167,8 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
         }
         /* buffer is not full */
         else {
-            buffer_t* new_buf = new buffer_t(table_id, pagenum);
+            buffer_t* new_buf = buf_pool[cur_count++];
+            set_buf(new_buf, table_id, pagenum);
             file_read_page(table_id, pagenum, (page_t*)new_buf->frame);
             insert_into_head(new_buf);
             new_buf->is_pinned = true;
@@ -177,7 +176,6 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
             // insert into hash
             int64_t new_key = convert_pair_to_key(table_id, pagenum);
             hash_pointer.insert({new_key, new_buf});
-            cur_count++;
 
             return new_buf;
         }
@@ -201,10 +199,6 @@ void BufferManager::buffer_write_page(int64_t table_id, pagenum_t pagenum) {
     buffer_t* cur_buf = find_buffer(table_id, pagenum);
     cur_buf->is_dirty = true;
 }
-
-/* IMPORTANT */
-/* BELOW FUNCTIONS SHOULD BE MODFIED */
-/* HEADER SHOULD BE SYNCHRONIZED WITH FILE */
 
 void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
     if(!is_buffer_exist(table_id, 0)) {

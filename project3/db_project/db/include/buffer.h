@@ -17,18 +17,20 @@ struct buffer_t {
     struct buffer_t* prev;
 
     buffer_t();
-    buffer_t(int64_t table_id, pagenum_t pagenum);
 };
 
 class BufferManager {
     /* field */
     buffer_t* buf_head;
     buffer_t* buf_tail;
+    std::vector<buffer_t*> buf_pool;
     std::unordered_map<int64_t, buffer_t*> hash_pointer;
     int max_count;
     int cur_count;
 
     private:
+        /* set buffer initial value */
+        void set_buf(buffer_t* buf, int64_t table_id, pagenum_t pagenum);
         /* move buffer to head */
         void move_to_head(buffer_t* buf);
         /* insert into head */
@@ -50,7 +52,7 @@ class BufferManager {
         /* constructor */
         BufferManager();
         /* set max buffer count */
-        void set_max_count(int max_count);
+        void init_buf(int max_count);
         /* unpin buffer */
         void unpin_buffer(int64_t table_id, pagenum_t pagenum);
         /* open table */
