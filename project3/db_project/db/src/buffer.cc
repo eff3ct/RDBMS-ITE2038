@@ -201,6 +201,14 @@ void BufferManager::buffer_write_page(int64_t table_id, pagenum_t pagenum) {
 }
 
 void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
+    if(is_buffer_exist(table_id, pagenum)) {
+        buffer_t* cur_buf = find_buffer(table_id, pagenum);
+        cur_buf->is_dirty = false;
+        int64_t key = convert_pair_to_key(table_id, pagenum);
+        hash_pointer.erase(key);
+        cur_buf->is_pinned = false;
+    }
+   
     if(!is_buffer_exist(table_id, 0)) {
         file_free_page(table_id, pagenum);
         return;
