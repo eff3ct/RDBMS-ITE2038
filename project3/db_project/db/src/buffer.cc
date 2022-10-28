@@ -121,18 +121,16 @@ int64_t BufferManager::buffer_open_table_file(const char* pathname) {
 }
 
 void BufferManager::destroy_all() {
-    buffer_t* cur_buf = buf_head->next;
-    while(cur_buf != buf_tail) {
-        if(cur_buf->is_dirty) {
-            file_write_page(cur_buf->table_id, cur_buf->pagenum, (page_t*)cur_buf->frame);
-            cur_buf->is_dirty = false;
+    for(int i = 0; i < max_count; ++i) {
+        if(buf_pool[i]->is_dirty) {
+            file_write_page(buf_pool[i]->table_id, buf_pool[i]->pagenum, (page_t*)buf_pool[i]->frame);
+            buf_pool[i]->is_dirty = false;
         }
-        buffer_t* tmp = cur_buf;
-        cur_buf = cur_buf->next;
-        delete tmp;
+        delete buf_pool[i];
     }
     cur_count = 0;
     hash_pointer.clear();
+    buf_pool.clear();
     buf_head->next = buf_tail;
     buf_tail->prev = buf_head;
 }
