@@ -39,6 +39,7 @@ int db_insert(int64_t table_id, int64_t key, const char* value, uint16_t val_siz
 /** Find a record containing the 'key'.
  * If a matching key exists, store its value in 'ret_val' and the corresponding size in 'val_size'.
  * If success, return 0 else return non-zero value.
+ * * acquire S lock
  */
 int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t* val_size, int trx_id) {
     buffer_t* header = buffer_manager.buffer_read_page(table_id, 0);
@@ -47,8 +48,14 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t* val_size, in
 
     auto location_pair = find(table_id, root, key);
     
-    if(location_pair == std::pair<pagenum_t, slotnum_t>({0, 0})) return -1;
+    if(location_pair == std::pair<pagenum_t, slotnum_t>({0, 0})) {
+        trx_manager.abort_trx(trx_id);
+        return -1;
+    }
     
+    pagenum_t leaf_page_num = location_pair.first;
+    slotnum_t record_id = location_pair.second;
+
     buffer_t* page = buffer_manager.buffer_read_page(table_id, location_pair.first);
     *val_size = page_io::leaf::get_record_size((page_t*)page->frame, location_pair.second);
     slotnum_t offset = page_io::leaf::get_offset((page_t*)page->frame, location_pair.second);

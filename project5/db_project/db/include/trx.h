@@ -5,6 +5,10 @@
 #include <string.h>
 #include <pthread.h>
 #include <unordered_map>
+#include <stack>
+#include <vector>
+#include <string>
+#include <set>
 
 #include "lock_table.h"
 
@@ -20,13 +24,29 @@ extern int global_trx_id;
 // Transaction Manager
 class TrxManager {
     private:
+        struct log_t {
+            std::string old_value;
+            int old_val_size;
+            int64_t table_id;
+            pagenum_t page_id;
+            slotnum_t slot_num;
+        };
+        
         std::unordered_map<int, lock_t*> trx_table;
+        std::vector<std::set<int>> trx_adj;
+        std::unordered_map<int, std::stack<log_t>> trx_log_table;
+
+        void update_graph(lock_t* lock);
+        int is_deadlock(int trx_id);
+        void undo_actions(int trx_id);
         
     public:
         // Constructor
         TrxManager();
         // Add transaction to trx_table
         void start_trx(int trx_id);
+        // Add action on trx_id
+        int add_action(int trx_id, lock_t* lock_obj);
         // Remove transaction from trx_table
         void remove_trx(int trx_id);
         // Abort transaction
@@ -49,4 +69,4 @@ int trx_begin();
  */
 int trx_commit(int trx_id);
 
-#endif TRX_H
+#endif

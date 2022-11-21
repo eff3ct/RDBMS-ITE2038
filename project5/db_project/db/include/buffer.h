@@ -16,8 +16,6 @@ struct buffer_t {
     pagenum_t pagenum;
     bool is_dirty;
 
-    // * is_pinned should be replaced by page latch
-    bool is_pinned;
     pthread_mutex_t page_latch;
 
     struct buffer_t* next;

@@ -5,6 +5,14 @@
 #include <pthread.h>
 #include <unordered_map>
 
+#define SHARED_LOCK 0
+#define EXCLUSIVE_LOCK 1
+
+typedef struct lock_table_entry_t lock_table_entry_t;
+typedef struct lock_t lock_t;
+typedef uint64_t pagenum_t;
+typedef int16_t slotnum_t;
+
 struct lock_t {
     lock_t* prev;
     lock_t* next;
@@ -50,9 +58,8 @@ struct lock_table_entry_t {
     }
 };
 
-typedef struct lock_table_entry_t lock_table_entry_t;
-typedef struct lock_t lock_t;
-typedef uint64_t pagenum_t;
+void unlink_and_awake_threads(lock_t* lock_obj);
+bool is_conflict(lock_t* lock_obj, int lock_mode);
 
 /* APIs for lock table */
 int init_lock_table();

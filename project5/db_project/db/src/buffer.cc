@@ -1,6 +1,7 @@
 #include "buffer.h"
 
 BufferManager buffer_manager;
+pthread_mutex_t buffer_manager_latch;
 
 int total_cnt;
 int cache_hit;
@@ -9,7 +10,7 @@ buffer_t::buffer_t() {
     table_id = -1;
     pagenum = -1;
     is_dirty = false;
-    is_pinned = false;
+    page_latch = PTHREAD_MUTEX_INITIALIZER;
     next = nullptr;
     prev = nullptr;
 }
@@ -19,7 +20,6 @@ void BufferManager::set_buf(buffer_t* buf, int64_t table_id, pagenum_t pagenum) 
     buf->table_id = table_id;
     buf->pagenum = pagenum;
 }
-
 void BufferManager::move_to_head(buffer_t* buf) {
     buf->prev->next = buf->next;
     buf->next->prev = buf->prev;
@@ -28,25 +28,22 @@ void BufferManager::move_to_head(buffer_t* buf) {
     buf_head->next->prev = buf;
     buf_head->next = buf;
 }
-
 void BufferManager::insert_into_head(buffer_t* buf) {
     buf->next = buf_head->next;
     buf->prev = buf_head;
     buf_head->next->prev = buf;
     buf_head->next = buf;
 }
-
 int64_t BufferManager::convert_pair_to_key(int64_t table_id, pagenum_t pagenum) { return (table_id << 32LL) | pagenum; }
+
+// * BELOW FUNCTIONS ARE MODIFIED FOR PROJECT 5 *
 
 void BufferManager::flush_buffer(buffer_t* buf) {
     if(buf->is_dirty) {
         file_write_page(buf->table_id, buf->pagenum, (page_t*)buf->frame);
         buf->is_dirty = false;
     }
-
-    buf->is_pinned = false;
 }
-
 void BufferManager::flush_buffer(int64_t table_id, pagenum_t pagenum) {
     if(!is_buffer_exist(table_id, pagenum)) return;
     
@@ -55,24 +52,19 @@ void BufferManager::flush_buffer(int64_t table_id, pagenum_t pagenum) {
         file_write_page(table_id, pagenum, (page_t*)cur_buf->frame);
         cur_buf->is_dirty = false;
     }
-
-    cur_buf->is_pinned = false;
 }
-
 bool BufferManager::is_buffer_exist(int64_t table_id, pagenum_t pagenum) {
     int64_t key = convert_pair_to_key(table_id, pagenum);
     return hash_pointer.find(key) != hash_pointer.end();
 }
-
 buffer_t* BufferManager::find_buffer(int64_t table_id, pagenum_t pagenum) {
     int64_t key = convert_pair_to_key(table_id, pagenum);
     return hash_pointer[key];
 }
-
 buffer_t* BufferManager::find_victim() {
     buffer_t* cur_buf = buf_tail->prev;
     while(cur_buf != buf_head) {
-        if(!cur_buf->is_pinned) return cur_buf;
+        if(pthread_mutex_trylock(&cur_buf->page_latch) == 0) return cur_buf;
         cur_buf = cur_buf->prev;
     }
 
@@ -102,25 +94,35 @@ BufferManager::~BufferManager() {
 }
 
 void BufferManager::init_buf(int max_count) { 
+    pthread_mutex_lock(&buffer_manager_latch);
+
     this->cur_count = 0;
     this->max_count = max_count;
     buf_pool.resize(max_count);
     for(int i = 0; i < max_count; ++i) 
         buf_pool[i] = new buffer_t();
+
+    pthread_mutex_unlock(&buffer_manager_latch);
 }
 
 void BufferManager::unpin_buffer(int64_t table_id, pagenum_t pagenum) {
     if(!is_buffer_exist(table_id, pagenum)) return;
     buffer_t* cur_buf = find_buffer(table_id, pagenum);
-    cur_buf->is_pinned = false;
+    pthread_mutex_unlock(&cur_buf->page_latch);
 }
 
 int64_t BufferManager::buffer_open_table_file(const char* pathname) {
+    pthread_mutex_lock(&buffer_manager_latch);
+
     int64_t table_id = file_open_table_file(pathname);
+
+    pthread_mutex_unlock(&buffer_manager_latch);
     return table_id;
 }
 
 void BufferManager::destroy_all() {
+    pthread_mutex_lock(&buffer_manager_latch);
+
     for(int i = 0; i < max_count; ++i) {
         if(buf_pool[i]->is_dirty) {
             file_write_page(buf_pool[i]->table_id, buf_pool[i]->pagenum, (page_t*)buf_pool[i]->frame);
@@ -133,14 +135,23 @@ void BufferManager::destroy_all() {
     buf_pool.clear();
     buf_head->next = buf_tail;
     buf_tail->prev = buf_head;
+
+    pthread_mutex_unlock(&buffer_manager_latch);
 }
 
 void BufferManager::buffer_close_table_file() {
+    pthread_mutex_lock(&buffer_manager_latch);
+
     file_close_table_files();
+
+    pthread_mutex_lock(&buffer_manager_latch);
 }
 
 buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
+    pthread_mutex_lock(&buffer_manager_latch);
+
     total_cnt++;
+
     /* cache miss */
     if(!is_buffer_exist(table_id, pagenum)) {
         /* when buffer is full */
@@ -152,29 +163,33 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
 
             // insert new buffer
             buffer_t* new_buf = victim;
+
+            pthread_mutex_lock(&new_buf->page_latch);
             set_buf(new_buf, table_id, pagenum);
             file_read_page(table_id, pagenum, (page_t*)new_buf->frame);
             move_to_head(new_buf);
-            new_buf->is_pinned = true;
 
             // insert into hash
             int64_t new_key = convert_pair_to_key(table_id, pagenum);
             hash_pointer.insert({new_key, new_buf});
 
+            pthread_mutex_unlock(&buffer_manager_latch);
             return new_buf;
         }
         /* buffer is not full */
         else {
             buffer_t* new_buf = buf_pool[cur_count++];
+
+            pthread_mutex_lock(&new_buf->page_latch);
             set_buf(new_buf, table_id, pagenum);
             file_read_page(table_id, pagenum, (page_t*)new_buf->frame);
             insert_into_head(new_buf);
-            new_buf->is_pinned = true;
 
             // insert into hash
             int64_t new_key = convert_pair_to_key(table_id, pagenum);
             hash_pointer.insert({new_key, new_buf});
 
+            pthread_mutex_unlock(&buffer_manager_latch);
             return new_buf;
         }
     }
@@ -182,33 +197,44 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
     else {
         cache_hit++;
         buffer_t* cur_buf = find_buffer(table_id, pagenum);
-        cur_buf->is_pinned = true;
-
+        pthread_mutex_lock(&cur_buf->page_latch);
+        
         // move to front
         move_to_head(cur_buf);
+
+        pthread_mutex_unlock(&buffer_manager_latch);
         return cur_buf;
     }
+
+    pthread_mutex_unlock(&buffer_manager_latch);
 
     return nullptr;
 }
 
 void BufferManager::buffer_write_page(int64_t table_id, pagenum_t pagenum) {
+    pthread_mutex_lock(&buffer_manager_latch);
+
     if(!is_buffer_exist(table_id, pagenum)) return;
     buffer_t* cur_buf = find_buffer(table_id, pagenum);
     cur_buf->is_dirty = true;
+
+    pthread_mutex_unlock(&buffer_manager_latch);
 }
 
 void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
+    pthread_mutex_lock(&buffer_manager_latch);
+
     if(is_buffer_exist(table_id, pagenum)) {
         buffer_t* cur_buf = find_buffer(table_id, pagenum);
         cur_buf->is_dirty = false;
         int64_t key = convert_pair_to_key(table_id, pagenum);
         hash_pointer.erase(key);
-        cur_buf->is_pinned = false;
     }
    
     if(!is_buffer_exist(table_id, 0)) {
         file_free_page(table_id, pagenum);
+
+        pthread_mutex_unlock(&buffer_manager_latch);
         return;
     }
 
@@ -222,6 +248,8 @@ void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
 
     page_io::header::set_next_free_page((page_t*)header_buf->frame, pagenum);
     header_buf->is_dirty = true;
+
+    pthread_mutex_unlock(&buffer_manager_latch);
 }
 
 pagenum_t BufferManager::buffer_alloc_page(int64_t table_id) {
