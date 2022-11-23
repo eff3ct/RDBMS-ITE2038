@@ -1,3 +1,2 @@
 build/
-test/insertion_test.cc
-test/deletion_test.cc
+*.db
