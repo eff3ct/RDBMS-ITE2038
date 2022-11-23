@@ -56,7 +56,7 @@ TEST(SingleThreadTxnTest, SLockOnlyTest) {
     std::vector<std::string> values;
     std::vector<int64_t> keys;
 
-    const int tree_size = 1000;
+    const int tree_size = 10000;
     make_random_tree(table_id, tree_size, values, keys);
     std::cout << "Random tree has been generated." << std::endl;
 
@@ -106,7 +106,7 @@ TEST(SingleThreadTxnTest, XLockOnlyTest) {
     std::vector<std::string> values;
     std::vector<int64_t> keys;
 
-    const int tree_size = 1000;
+    const int tree_size = 10000;
     make_random_tree(table_id, tree_size, values, keys);
     std::cout << "Random tree has been generated." << std::endl;
 

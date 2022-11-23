@@ -3,7 +3,7 @@
 #include <iostream>
 
 pthread_mutex_t trx_manager_latch = PTHREAD_MUTEX_INITIALIZER;
-int global_trx_id;
+int64_t global_trx_id;
 TrxManager trx_manager;
 
 bool TrxManager::is_lock_exist(int trx_id, lock_t* lock_obj) {
@@ -32,7 +32,7 @@ void TrxManager::remove_trx(int trx_id) {
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
     // check lock_obj is already in trx_table[trx_id]
     if(is_lock_exist(trx_id, lock_obj)) return;
-    
+
     if(trx_table[trx_id] == nullptr) {
         trx_table[trx_id] = lock_obj;
         lock_obj->next_trx_lock_obj = nullptr;

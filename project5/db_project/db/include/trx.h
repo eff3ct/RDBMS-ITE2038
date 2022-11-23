@@ -19,7 +19,7 @@
 extern pthread_mutex_t trx_manager_latch;
 
 // Global Transaction ID 
-extern int global_trx_id;
+extern int64_t global_trx_id;
 
 // Transaction Manager
 class TrxManager {

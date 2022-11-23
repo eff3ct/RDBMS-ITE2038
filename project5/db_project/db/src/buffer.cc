@@ -156,7 +156,7 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
     if(!is_buffer_exist(table_id, pagenum)) {
         /* when buffer is full */
         if(cur_count == max_count) {
-            buffer_t* victim = find_victim();
+            buffer_t* victim = find_victim(); /* page latch aquired in here */
             if(victim->is_dirty) flush_buffer(victim);
             int64_t key = convert_pair_to_key(victim->table_id, victim->pagenum);
             hash_pointer.erase(key);
@@ -164,7 +164,6 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
             // insert new buffer
             buffer_t* new_buf = victim;
 
-            pthread_mutex_lock(&new_buf->page_latch);
             set_buf(new_buf, table_id, pagenum);
             file_read_page(table_id, pagenum, (page_t*)new_buf->frame);
             move_to_head(new_buf);
