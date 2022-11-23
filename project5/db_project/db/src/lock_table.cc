@@ -53,7 +53,7 @@ bool is_conflict(lock_t* lock_obj) {
             else if(cur_lock_obj->record_id == lock_obj->record_id
             && cur_lock_obj->lock_mode == SHARED_LOCK
             && lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-                std::cout << "???\n";
+                std::cout << cur_lock_obj->owner_trx_id << " " << lock_obj->owner_trx_id << std::endl;
                 return true;
             }
         }

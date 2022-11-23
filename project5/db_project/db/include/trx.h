@@ -4,9 +4,12 @@
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
+
 #include <unordered_map>
 #include <stack>
 #include <vector>
+#include <functional>
+#include <algorithm>
 #include <string>
 #include <set>
 
@@ -38,7 +41,7 @@ class TrxManager {
 
         bool is_lock_exist(int trx_id, lock_t* lock_obj);
         void update_graph(lock_t* lock);
-        int is_deadlock(int trx_id);
+        bool is_deadlock(int trx_id);
         void undo_actions(int trx_id);
         
     public:
