@@ -27,6 +27,13 @@ int db_insert(int64_t table_id, int64_t key, const char* value, uint16_t val_siz
  * If a matching key exists, store its value in 'ret_val' and the corresponding size in 'val_size'.
  * If success, return 0 else return non-zero value.
  */
+int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t* val_size);
+
+/** Find a record containing the 'key'.
+ * If a matching key exists, store its value in 'ret_val' and the corresponding size in 'val_size'.
+ * If success, return 0 else return non-zero value.
+ * * support transaction
+ */
 int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t* val_size, int trx_id);
 
 /** Find a record with the matching key and delete it.

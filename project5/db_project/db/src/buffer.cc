@@ -144,7 +144,7 @@ void BufferManager::buffer_close_table_file() {
 
     file_close_table_files();
 
-    pthread_mutex_lock(&buffer_manager_latch);
+    pthread_mutex_unlock(&buffer_manager_latch);
 }
 
 buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {

@@ -7,6 +7,8 @@ set(DB_SOURCES
   ${DB_SOURCE_DIR}/db.cc
   ${DB_SOURCE_DIR}/on-disk-bpt.cc
   ${DB_SOURCE_DIR}/buffer.cc
+  ${DB_SOURCE_DIR}/trx.cc
+  ${DB_SOURCE_DIR}/lock_table.cc
   # Add your sources here
   # ${DB_SOURCE_DIR}/foo/bar/your_source.cc
   )
@@ -20,6 +22,8 @@ set(DB_HEADERS
   ${DB_HEADER_DIR}/db.h
   ${DB_HEADER_DIR}/on-disk-bpt.h
   ${DB_HEADER_DIR}/buffer.h
+  ${DB_HEADER_DIR}/trx.h
+  ${DB_HEADER_DIR}/lock_table.h
   # Add your headers here
   # ${DB_HEADER_DIR}/foo/bar/your_header.h
   )

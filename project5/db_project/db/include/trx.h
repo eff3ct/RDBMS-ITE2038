@@ -41,12 +41,10 @@ class TrxManager {
         void undo_actions(int trx_id);
         
     public:
-        // Constructor
-        TrxManager();
         // Add transaction to trx_table
         void start_trx(int trx_id);
         // Add action on trx_id
-        int add_action(int trx_id, lock_t* lock_obj);
+        void add_action(int trx_id, lock_t* lock_obj);
         // Remove transaction from trx_table
         void remove_trx(int trx_id);
         // Abort transaction

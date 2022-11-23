@@ -30,6 +30,8 @@ void unlink_and_awake_threads(lock_t* lock_obj) {
                 break;
             }
         }
+
+        cur_lock_obj = cur_lock_obj->next;
     }
 
     delete lock_obj;
