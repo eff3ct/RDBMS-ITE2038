@@ -28,6 +28,10 @@ struct lock_t {
         next = nullptr;
         sentinel = nullptr;
         cond = PTHREAD_COND_INITIALIZER;
+        lock_mode = -1;
+        record_id = -1;
+        next_trx_lock_obj = nullptr;
+        owner_trx_id = -1;
     }
 
     lock_t(pagenum_t record_id, int trx_id, int lock_mode) {

@@ -1,4 +1,5 @@
 #include "lock_table.h"
+#include <iostream>
 
 typedef struct lock_t lock_t;
 typedef struct lock_table_entry_t lock_table_entry_t;
@@ -44,10 +45,18 @@ bool is_conflict(lock_t* lock_obj) {
 
     do {
         cur_lock_obj = cur_lock_obj->prev;
-        if(cur_lock_obj->record_id == lock_obj->record_id
-        && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
-        && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK)
-            return true;
+
+        if(cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id) {
+            if(cur_lock_obj->record_id == lock_obj->record_id
+            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) 
+                return true;
+            else if(cur_lock_obj->record_id == lock_obj->record_id
+            && cur_lock_obj->lock_mode == SHARED_LOCK
+            && lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+                std::cout << "???\n";
+                return true;
+            }
+        }
     }
     while(cur_lock_obj != lock_obj->sentinel->head);
 
@@ -55,6 +64,7 @@ bool is_conflict(lock_t* lock_obj) {
 }
 
 int init_lock_table() {
+    lock_table = {};
     lock_table_latch = PTHREAD_MUTEX_INITIALIZER;
     return 0;
 }
@@ -84,33 +94,85 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
     // * CASE : there is a combined_key entry.
     else {
         if(lock_table[combined_key]->tail->prev != lock_table[combined_key]->head) {
-            // * CASE : there is a S lock in lock table and current lock mode is X.
-            // * add X lock into lock table.
+            // // * CASE : there is a S lock in lock table and current lock mode is X.
+            // // * add X lock into lock table.
 
-            // * CASE : there is a X lock in lock table and current lock mode is S.
-            // * return X lock obj.
+            // // * CASE : there is a X lock in lock table and current lock mode is S.
+            // // * return X lock obj.
 
-            // * CASE : there is a X lock in lock table and current lock mode is X.
-            // * return exisiting lock obj.
+            // // * CASE : there is a X lock in lock table and current lock mode is X.
+            // // * return exisiting lock obj.
 
-            // * CASE : there is a S lock in lock table and current lock mode is S.
-            // * return exisiting lock obj.
+            // // * CASE : there is a S lock in lock table and current lock mode is S.
+            // // * return exisiting lock obj.
+
+            // lock_t* cur_lock = lock_table[combined_key]->tail->prev;
+
+            // /* Find exisiting lock obj */
+            // bool is_found = false;
+            // while(cur_lock != lock_table[combined_key]->head) {
+            //     if(cur_lock->record_id == key) {
+            //         if(cur_lock->lock_mode == EXCLUSIVE_LOCK) {
+            //             ret_obj = cur_lock;
+            //             is_found = true;
+            //             break;
+            //         }
+            //         else if(cur_lock->lock_mode == SHARED_LOCK && lock_mode == EXCLUSIVE_LOCK) {
+            //             lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
+            //             lock_obj->sentinel = lock_table[combined_key];
+
+            //             /* link node */
+            //             lock_table[combined_key]->tail->prev->next = lock_obj;
+            //             lock_obj->prev = lock_table[combined_key]->tail->prev;
+            //             lock_obj->next = lock_table[combined_key]->tail;
+            //             lock_table[combined_key]->tail->prev = lock_obj;
+
+            //             ret_obj = lock_obj;
+            //             is_found = true;
+            //             break;
+            //         }
+            //         else if(cur_lock->lock_mode == SHARED_LOCK && lock_mode == SHARED_LOCK) {
+            //             ret_obj = cur_lock;
+            //             is_found = true;
+            //             break;
+            //         }
+            //     }
+
+            //     cur_lock = cur_lock->prev;
+            // }
+
+            // /* If there is no exisiting lock obj, add new lock obj */
+            // if(!is_found) {
+            //     lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
+            //     lock_obj->sentinel = lock_table[combined_key];
+
+            //     /* link node */
+            //     lock_table[combined_key]->tail->prev->next = lock_obj;
+            //     lock_obj->prev = lock_table[combined_key]->tail->prev;
+            //     lock_obj->next = lock_table[combined_key]->tail;
+            //     lock_table[combined_key]->tail->prev = lock_obj;
+
+            //     ret_obj = lock_obj;
+            // }
+
+            // while(is_conflict(ret_obj)) 
+            //     pthread_cond_wait(&ret_obj->cond, &lock_table_latch);
 
             // Project 4 implementation below.
-            // /* there is already lock object */
-            // lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
-            // lock_obj->sentinel = lock_table[combined_key];
+            /* there is already lock object */
+            lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
+            lock_obj->sentinel = lock_table[combined_key];
 
-            // /* insert into tail */
-            // lock_obj->prev = lock_table[combined_key]->tail->prev;
-            // lock_obj->next = lock_table[combined_key]->tail;
-            // lock_table[combined_key]->tail->prev->next = lock_obj;
-            // lock_table[combined_key]->tail->prev = lock_obj;
+            /* insert into tail */
+            lock_obj->prev = lock_table[combined_key]->tail->prev;
+            lock_obj->next = lock_table[combined_key]->tail;
+            lock_table[combined_key]->tail->prev->next = lock_obj;
+            lock_table[combined_key]->tail->prev = lock_obj;
 
-            // while(is_conflict(lock_obj)) 
-            //     pthread_cond_wait(&lock_obj->cond, &lock_table_latch);
+            while(is_conflict(lock_obj)) 
+                pthread_cond_wait(&lock_obj->cond, &lock_table_latch);
 
-            // ret_obj = lock_obj;
+            ret_obj = lock_obj;
         }
         else {
             /* there is no lock object */

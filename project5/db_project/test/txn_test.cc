@@ -255,3 +255,77 @@ TEST(SingleThreadTxnTest, SXLockTest) {
 
     std::cout << "DB has been shutdown." << std::endl;
 }
+
+/****************************************************************************************/
+/*                                  Multi Thread Test                                   */  
+/****************************************************************************************/
+
+#define THREAD_N 10
+#define RD_N 300
+#define path_multi_thread_rd "multi_thread_rd.db"
+
+pthread_t threads[THREAD_N];
+
+std::vector<std::string> multi_rd_values;
+std::vector<int64_t> multi_rd_keys;
+
+void* thread_rnd_read(void* arg) {
+    int64_t table_id = *((int*)arg);
+
+    /* Transaction Begin */
+    int trx_id = trx_begin();
+    EXPECT_GT(trx_id, 0);
+
+    std::cout << "Transaction " << trx_id << " has been started." << std::endl;
+
+    for(int i = 0; i < RD_N; ++i) {
+        char buf[150]; uint16_t val_size;
+        int64_t key = multi_rd_keys[i];
+        int flag = db_find(table_id, key, buf, &val_size, trx_id);
+
+        EXPECT_EQ(flag, 0)
+            << "db_find \\w trx failed | index : " << i << " | key : " << key << '\n';
+
+        EXPECT_EQ(
+            std::string(buf, val_size),
+            multi_rd_values[i]
+        )
+        << "Not an expected value. | index : " << i << " | key : " << key << '\n'
+        << "Expected : " << multi_rd_values[i] << '\n'
+        << "Actual : " << std::string(buf, val_size) << '\n';
+    }
+
+    std::cout << "Try to commit Transaction " << trx_id << std::endl;
+    EXPECT_EQ(trx_commit(trx_id), trx_id)
+        << "trx_commit failed | trx_id : " << trx_id << '\n';
+    /* Transaction End */
+
+    return NULL;
+}
+
+TEST(MultiThreadTxnTest, SLockOnlyTest) {
+    if(!std::remove(path_multi_thread_rd)) 
+        std::cout << "File " << path_multi_thread_rd << " has been removed." << std::endl;
+    int64_t table_id = open_table(path_multi_thread_rd);
+
+    init_db(64);
+    make_random_tree(table_id, 1000, multi_rd_values, multi_rd_keys);
+    std::cout << "Random tree has been created." << std::endl;
+    shutdown_db();
+
+    int64_t* tid = new int64_t;
+    *tid = open_table(path_multi_thread_rd);
+
+    init_db(64);
+    for(int i = 0; i < THREAD_N; ++i) {
+        pthread_create(&threads[i], 0, thread_rnd_read, tid);
+    }
+    
+    for(int i = 0; i < THREAD_N; ++i) {
+        pthread_join(threads[i], NULL);
+    }
+
+    delete tid;
+
+    shutdown_db();
+}

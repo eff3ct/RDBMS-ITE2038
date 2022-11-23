@@ -22,7 +22,6 @@ void TrxManager::remove_trx(int trx_id) {
     lock_t* cur_lock_obj = trx_table[trx_id];
 
     while(cur_lock_obj != nullptr) {
-        std::cout << "remove_lock: " << cur_lock_obj->record_id << std::endl;
         lock_t* next_lock_obj = cur_lock_obj->next_trx_lock_obj;
         lock_release(cur_lock_obj);
         cur_lock_obj = next_lock_obj;
@@ -33,7 +32,7 @@ void TrxManager::remove_trx(int trx_id) {
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
     // check lock_obj is already in trx_table[trx_id]
     if(is_lock_exist(trx_id, lock_obj)) return;
-
+    
     if(trx_table[trx_id] == nullptr) {
         trx_table[trx_id] = lock_obj;
         lock_obj->next_trx_lock_obj = nullptr;
@@ -43,6 +42,7 @@ void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
         while(cur_ptr->next_trx_lock_obj != nullptr) 
             cur_ptr = cur_ptr->next_trx_lock_obj;
         cur_ptr->next_trx_lock_obj = lock_obj;
+        lock_obj->next_trx_lock_obj = nullptr;
     }
 }
 
