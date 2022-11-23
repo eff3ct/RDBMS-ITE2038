@@ -14,7 +14,8 @@ void unlink_and_awake_threads(lock_t* lock_obj) {
     lock_obj->next->prev = lock_obj->prev;
 
     while(cur_lock_obj != lock_obj->sentinel->tail) {
-        if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+        if(lock_obj->lock_mode == EXCLUSIVE_LOCK
+        && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
             if(cur_lock_obj->record_id == lock_obj->record_id) {
                 if(cur_lock_obj->lock_mode == SHARED_LOCK) pthread_cond_signal(&cur_lock_obj->cond);
                 else {
@@ -23,7 +24,8 @@ void unlink_and_awake_threads(lock_t* lock_obj) {
                 }
             }
         }
-        else {
+        else if(lock_obj->lock_mode == SHARED_LOCK
+        && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
             if(cur_lock_obj->record_id == lock_obj->record_id
             && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
                 pthread_cond_signal(&cur_lock_obj->cond);
@@ -43,6 +45,7 @@ bool is_conflict(lock_t* lock_obj) {
     do {
         cur_lock_obj = cur_lock_obj->prev;
         if(cur_lock_obj->record_id == lock_obj->record_id
+        && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
         && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK)
             return true;
     }
@@ -81,20 +84,33 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
     // * CASE : there is a combined_key entry.
     else {
         if(lock_table[combined_key]->tail->prev != lock_table[combined_key]->head) {
-            /* there is already lock object */
-            lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
-            lock_obj->sentinel = lock_table[combined_key];
+            // * CASE : there is a S lock in lock table and current lock mode is X.
+            // * add X lock into lock table.
 
-            /* insert into tail */
-            lock_obj->prev = lock_table[combined_key]->tail->prev;
-            lock_obj->next = lock_table[combined_key]->tail;
-            lock_table[combined_key]->tail->prev->next = lock_obj;
-            lock_table[combined_key]->tail->prev = lock_obj;
+            // * CASE : there is a X lock in lock table and current lock mode is S.
+            // * return X lock obj.
 
-            while(is_conflict(lock_obj)) 
-                pthread_cond_wait(&lock_obj->cond, &lock_table_latch);
+            // * CASE : there is a X lock in lock table and current lock mode is X.
+            // * return exisiting lock obj.
 
-            ret_obj = lock_obj;
+            // * CASE : there is a S lock in lock table and current lock mode is S.
+            // * return exisiting lock obj.
+
+            // Project 4 implementation below.
+            // /* there is already lock object */
+            // lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
+            // lock_obj->sentinel = lock_table[combined_key];
+
+            // /* insert into tail */
+            // lock_obj->prev = lock_table[combined_key]->tail->prev;
+            // lock_obj->next = lock_table[combined_key]->tail;
+            // lock_table[combined_key]->tail->prev->next = lock_obj;
+            // lock_table[combined_key]->tail->prev = lock_obj;
+
+            // while(is_conflict(lock_obj)) 
+            //     pthread_cond_wait(&lock_obj->cond, &lock_table_latch);
+
+            // ret_obj = lock_obj;
         }
         else {
             /* there is no lock object */

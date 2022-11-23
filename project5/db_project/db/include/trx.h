@@ -36,6 +36,7 @@ class TrxManager {
         std::vector<std::set<int>> trx_adj;
         std::unordered_map<int, std::stack<log_t>> trx_log_table;
 
+        bool is_lock_exist(int trx_id, lock_t* lock_obj);
         void update_graph(lock_t* lock);
         int is_deadlock(int trx_id);
         void undo_actions(int trx_id);
