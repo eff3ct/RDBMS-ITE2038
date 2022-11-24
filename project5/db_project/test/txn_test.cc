@@ -260,8 +260,8 @@ TEST(SingleThreadTxnTest, SXLockTest) {
 /*                                  Multi Thread Test                                   */  
 /****************************************************************************************/
 
-#define THREAD_N 10
-#define RD_N 300
+#define THREAD_N 20
+#define RD_N 500
 #define path_multi_thread_rd "multi_thread_rd.db"
 
 pthread_t threads[THREAD_N];
@@ -309,7 +309,7 @@ TEST(MultiThreadTxnTest, SLockOnlyTest) {
     int64_t table_id = open_table(path_multi_thread_rd);
 
     init_db(64);
-    make_random_tree(table_id, 10000, multi_rd_values, multi_rd_keys);
+    make_random_tree(table_id, 20000, multi_rd_values, multi_rd_keys);
     std::cout << "Random tree has been created." << std::endl;
     shutdown_db();
 

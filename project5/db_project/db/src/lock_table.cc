@@ -1,4 +1,5 @@
 #include "lock_table.h"
+#include "trx.h"
 #include <iostream>
 
 typedef struct lock_t lock_t;
@@ -41,24 +42,23 @@ void unlink_and_awake_threads(lock_t* lock_obj) {
 }
  
 bool is_conflict(lock_t* lock_obj) {
-    lock_t* cur_lock_obj = lock_obj;
+    lock_t* cur_lock_obj = lock_obj->prev;
 
-    do {
-        cur_lock_obj = cur_lock_obj->prev;
-
-        if(cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id) {
-            if(cur_lock_obj->record_id == lock_obj->record_id
-            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) 
-                return true;
-            else if(cur_lock_obj->record_id == lock_obj->record_id
-            && cur_lock_obj->lock_mode == SHARED_LOCK
-            && lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-                std::cout << cur_lock_obj->owner_trx_id << " " << lock_obj->owner_trx_id << std::endl;
+    while(cur_lock_obj != lock_obj->sentinel->head) {
+        if(lock_obj->lock_mode == EXCLUSIVE_LOCK
+        && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
+            if(cur_lock_obj->record_id == lock_obj->record_id) {
                 return true;
             }
         }
+        else if(lock_obj->lock_mode == SHARED_LOCK
+        && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
+            if(cur_lock_obj->record_id == lock_obj->record_id
+            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) return true;
+        }
+
+        cur_lock_obj = cur_lock_obj->prev;
     }
-    while(cur_lock_obj != lock_obj->sentinel->head);
 
     return false;
 }
@@ -169,6 +169,9 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
             lock_table[combined_key]->tail->prev->next = lock_obj;
             lock_table[combined_key]->tail->prev = lock_obj;
 
+            
+
+            /* check conflict */
             while(is_conflict(lock_obj)) 
                 pthread_cond_wait(&lock_obj->cond, &lock_table_latch);
 
