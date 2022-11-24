@@ -36,6 +36,7 @@ class TrxManager {
         };
         
         std::unordered_map<int, lock_t*> trx_table;
+        std::unordered_map<int, lock_t*> tail_trx_table;
         std::vector<std::set<int>> trx_adj;
         std::unordered_map<int, std::stack<log_t>> trx_log_table;
 

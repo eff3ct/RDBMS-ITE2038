@@ -28,6 +28,7 @@ bool TrxManager::is_deadlock(int trx_id) {
 
 void TrxManager::start_trx(int trx_id) {
     trx_table.insert({trx_id, nullptr});
+    tail_trx_table.insert({trx_id, nullptr});
 }
 void TrxManager::remove_trx(int trx_id) {
     lock_t* cur_lock_obj = trx_table[trx_id];
@@ -39,6 +40,7 @@ void TrxManager::remove_trx(int trx_id) {
     }
 
     trx_table.erase(trx_id);
+    tail_trx_table.erase(trx_id);
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
     pthread_mutex_lock(&trx_manager_latch);
@@ -46,13 +48,12 @@ void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
     if(trx_table[trx_id] == nullptr) {
         trx_table[trx_id] = lock_obj;
         lock_obj->next_trx_lock_obj = nullptr;
+        tail_trx_table[trx_id] = lock_obj;
     }
     else {
-        lock_t* cur_ptr = trx_table[trx_id];
-        while(cur_ptr->next_trx_lock_obj != nullptr) 
-            cur_ptr = cur_ptr->next_trx_lock_obj;
-        cur_ptr->next_trx_lock_obj = lock_obj;
+        tail_trx_table[trx_id]->next_trx_lock_obj = lock_obj;
         lock_obj->next_trx_lock_obj = nullptr;
+        tail_trx_table[trx_id] = lock_obj;
     }
     
     pthread_mutex_unlock(&trx_manager_latch);
