@@ -169,8 +169,6 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
             lock_table[combined_key]->tail->prev->next = lock_obj;
             lock_table[combined_key]->tail->prev = lock_obj;
 
-            
-
             /* check conflict */
             while(is_conflict(lock_obj)) 
                 pthread_cond_wait(&lock_obj->cond, &lock_table_latch);
