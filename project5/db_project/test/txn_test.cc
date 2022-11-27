@@ -311,7 +311,7 @@ TEST(MultiThreadTxnTest, SLockOnlyTest) {
     int64_t table_id = open_table(path_multi_thread_rd);
 
     init_db(64);
-    make_random_tree(table_id, 1000, multi_rd_values, multi_rd_keys);
+    make_random_tree(table_id, 10000, multi_rd_values, multi_rd_keys);
     std::cout << "Random tree has been created." << std::endl;
     shutdown_db();
 

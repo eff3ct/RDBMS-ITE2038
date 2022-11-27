@@ -54,16 +54,25 @@ void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
     //     tail_trx_table[trx_id] = lock_obj;
     // }
 
+    // if(trx_table[trx_id] == nullptr) {
+    //     trx_table[trx_id] = lock_obj;
+    //     lock_obj->next_trx_lock_obj = nullptr;
+    // }
+    // else {
+    //     lock_t* cur_ptr = trx_table[trx_id];
+    //     while(cur_ptr->next_trx_lock_obj != nullptr) 
+    //         cur_ptr = cur_ptr->next_trx_lock_obj;
+    //     cur_ptr->next_trx_lock_obj = lock_obj;
+    //     lock_obj->next_trx_lock_obj = nullptr;
+    // }
+
     if(trx_table[trx_id] == nullptr) {
         trx_table[trx_id] = lock_obj;
         lock_obj->next_trx_lock_obj = nullptr;
     }
     else {
-        lock_t* cur_ptr = trx_table[trx_id];
-        while(cur_ptr->next_trx_lock_obj != nullptr) 
-            cur_ptr = cur_ptr->next_trx_lock_obj;
-        cur_ptr->next_trx_lock_obj = lock_obj;
-        lock_obj->next_trx_lock_obj = nullptr;
+        lock_obj->next_trx_lock_obj = trx_table[trx_id];
+        trx_table[trx_id] = lock_obj;
     }
 }
 
