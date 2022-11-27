@@ -28,7 +28,6 @@ bool TrxManager::is_deadlock(int trx_id) {
 
 void TrxManager::start_trx(int trx_id) {
     trx_table.insert({trx_id, nullptr});
-    // tail_trx_table.insert({trx_id, nullptr});
 }
 void TrxManager::remove_trx(int trx_id) {
     lock_t* cur_lock_obj = trx_table[trx_id];
@@ -40,40 +39,10 @@ void TrxManager::remove_trx(int trx_id) {
     }
 
     trx_table.erase(trx_id);
-    // tail_trx_table.erase(trx_id);
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
-    // if(trx_table[trx_id] == nullptr) {
-    //     trx_table[trx_id] = lock_obj;
-    //     lock_obj->next_trx_lock_obj = nullptr;
-    //     tail_trx_table[trx_id] = lock_obj;
-    // }
-    // else {
-    //     tail_trx_table[trx_id]->next_trx_lock_obj = lock_obj;
-    //     lock_obj->next_trx_lock_obj = nullptr;
-    //     tail_trx_table[trx_id] = lock_obj;
-    // }
-
-    // if(trx_table[trx_id] == nullptr) {
-    //     trx_table[trx_id] = lock_obj;
-    //     lock_obj->next_trx_lock_obj = nullptr;
-    // }
-    // else {
-    //     lock_t* cur_ptr = trx_table[trx_id];
-    //     while(cur_ptr->next_trx_lock_obj != nullptr) 
-    //         cur_ptr = cur_ptr->next_trx_lock_obj;
-    //     cur_ptr->next_trx_lock_obj = lock_obj;
-    //     lock_obj->next_trx_lock_obj = nullptr;
-    // }
-
-    if(trx_table[trx_id] == nullptr) {
-        trx_table[trx_id] = lock_obj;
-        lock_obj->next_trx_lock_obj = nullptr;
-    }
-    else {
-        lock_obj->next_trx_lock_obj = trx_table[trx_id];
-        trx_table[trx_id] = lock_obj;
-    }
+    lock_obj->next_trx_lock_obj = trx_table[trx_id];
+    trx_table[trx_id] = lock_obj;
 }
 
 // TODO : Transaction abort control (deadlock)
@@ -95,4 +64,13 @@ int trx_commit(int trx_id) {
     pthread_mutex_unlock(&trx_manager_latch);
 
     return trx_id;
+}
+
+void trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int trx_id, int lock_mode) {
+    pthread_mutex_lock(&trx_manager_latch);
+
+    lock_t* lock_obj = lock_acquire(table_id, page_id, slot_num, trx_id, lock_mode);
+    trx_manager.add_action(trx_id, lock_obj);
+
+    pthread_mutex_unlock(&trx_manager_latch);
 }

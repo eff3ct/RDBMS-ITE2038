@@ -14,6 +14,7 @@ set(DB_TESTS
   # on-disk-bpt-test.cc
   # insertion_test.cc
   # deletion_test.cc
+  # txn_test__.cc
   txn_test.cc
   )
 

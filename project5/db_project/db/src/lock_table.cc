@@ -26,59 +26,64 @@ void unlink_and_awake_threads(lock_t* lock_obj) {
     lock_obj->prev->next = lock_obj->next;
     lock_obj->next->prev = lock_obj->prev;
 
-    int cnt = 0;
-
     while(cur_lock_obj != lock_obj->sentinel->tail) {
-        if(lock_obj->lock_mode == EXCLUSIVE_LOCK
-        && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
-            if(cur_lock_obj->record_id == lock_obj->record_id) {
-                if(cur_lock_obj->lock_mode == SHARED_LOCK) pthread_cond_signal(&cur_lock_obj->cond);
-                else {
-                    pthread_cond_signal(&cur_lock_obj->cond);
-                    break;
-                }
-            }
-        }
-        else if(lock_obj->lock_mode == SHARED_LOCK
-        && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
-            if(cur_lock_obj->record_id == lock_obj->record_id
-            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-                pthread_cond_signal(&cur_lock_obj->cond);
-                break;
-            }
-        }
-
-        // if(cur_lock_obj->record_id != lock_obj->record_id) {
-        //     cur_lock_obj = cur_lock_obj->next;
-        //     continue;
-        // }
-
-        // if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-        //     if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
-        //     && cnt == 0) {
-        //         pthread_cond_signal(&cur_lock_obj->cond);
-        //         break;
-        //     }
-        //     else if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
-        //     && cnt) {
-        //         break;
-        //     }
-        //     else if(cur_lock_obj->lock_mode == SHARED_LOCK) {
-        //         pthread_cond_signal(&cur_lock_obj->cond);
-        //         cnt++;
-        //     }
-        // }
-        // else if(lock_obj->lock_mode == SHARED_LOCK) {
-        //     if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-        //         pthread_cond_signal(&cur_lock_obj->cond);
-        //         break;
-        //     }
-        // }
-            
-        // TODO : X락 해제 -> 모든 S락을 풀어주기 or 하나의 X락을 풀어주기 | S락 해제 -> 하나의 X락만 풀어주기
-
+        pthread_cond_signal(&cur_lock_obj->cond);
         cur_lock_obj = cur_lock_obj->next;
     }
+
+    // int cnt = 0;
+
+    // while(cur_lock_obj != lock_obj->sentinel->tail) {
+    //     if(lock_obj->lock_mode == EXCLUSIVE_LOCK
+    //     && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
+    //         if(cur_lock_obj->record_id == lock_obj->record_id) {
+    //             if(cur_lock_obj->lock_mode == SHARED_LOCK) pthread_cond_signal(&cur_lock_obj->cond);
+    //             else {
+    //                 pthread_cond_signal(&cur_lock_obj->cond);
+    //                 break;
+    //             }
+    //         }
+    //     }
+    //     else if(lock_obj->lock_mode == SHARED_LOCK
+    //     && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
+    //         if(cur_lock_obj->record_id == lock_obj->record_id
+    //         && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+    //             pthread_cond_signal(&cur_lock_obj->cond);
+    //             break;
+    //         }
+    //     }
+
+    //     // if(cur_lock_obj->record_id != lock_obj->record_id) {
+    //     //     cur_lock_obj = cur_lock_obj->next;
+    //     //     continue;
+    //     // }
+
+    //     // if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+    //     //     if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
+    //     //     && cnt == 0) {
+    //     //         pthread_cond_signal(&cur_lock_obj->cond);
+    //     //         break;
+    //     //     }
+    //     //     else if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
+    //     //     && cnt) {
+    //     //         break;
+    //     //     }
+    //     //     else if(cur_lock_obj->lock_mode == SHARED_LOCK) {
+    //     //         pthread_cond_signal(&cur_lock_obj->cond);
+    //     //         cnt++;
+    //     //     }
+    //     // }
+    //     // else if(lock_obj->lock_mode == SHARED_LOCK) {
+    //     //     if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+    //     //         pthread_cond_signal(&cur_lock_obj->cond);
+    //     //         break;
+    //     //     }
+    //     // }
+            
+    //     // TODO : X락 해제 -> 모든 S락을 풀어주기 or 하나의 X락을 풀어주기 | S락 해제 -> 하나의 X락만 풀어주기
+
+    //     cur_lock_obj = cur_lock_obj->next;
+    // }
 
     delete lock_obj;
 }
@@ -130,77 +135,12 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
         lock_obj->next = lock_table[combined_key]->tail;
         lock_table[combined_key]->tail->prev = lock_obj;
 
-        trx_manager.add_action(trx_id, lock_obj);
-
         ret_obj = lock_obj;
     }
 
     // * CASE : there is a combined_key entry.
     else {
         if(lock_table[combined_key]->tail->prev != lock_table[combined_key]->head) {            // // * CASE : there is a S lock in lock table and current lock mode is X.
-            // // * add X lock into lock table.
-
-            // // * CASE : there is a X lock in lock table and current lock mode is S.
-            // // * return X lock obj.
-
-            // // * CASE : there is a X lock in lock table and current lock mode is X.
-            // // * return exisiting lock obj.
-
-            // // * CASE : there is a S lock in lock table and current lock mode is S.
-            // // * return exisiting lock obj.
-
-            // lock_t* cur_lock = lock_table[combined_key]->tail->prev;
-
-            // /* Find exisiting lock obj */
-            // bool is_found = false;
-            // while(cur_lock != lock_table[combined_key]->head) {
-            //     if(cur_lock->record_id == key) {
-            //         if(cur_lock->lock_mode == EXCLUSIVE_LOCK) {
-            //             ret_obj = cur_lock;
-            //             is_found = true;
-            //             break;
-            //         }
-            //         else if(cur_lock->lock_mode == SHARED_LOCK && lock_mode == EXCLUSIVE_LOCK) {
-            //             lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
-            //             lock_obj->sentinel = lock_table[combined_key];
-
-            //             /* link node */
-            //             lock_table[combined_key]->tail->prev->next = lock_obj;
-            //             lock_obj->prev = lock_table[combined_key]->tail->prev;
-            //             lock_obj->next = lock_table[combined_key]->tail;
-            //             lock_table[combined_key]->tail->prev = lock_obj;
-
-            //             ret_obj = lock_obj;
-            //             is_found = true;
-            //             break;
-            //         }
-            //         else if(cur_lock->lock_mode == SHARED_LOCK && lock_mode == SHARED_LOCK) {
-            //             ret_obj = cur_lock;
-            //             is_found = true;
-            //             break;
-            //         }
-            //     }
-
-            //     cur_lock = cur_lock->prev;
-            // }
-
-            // /* If there is no exisiting lock obj, add new lock obj */
-            // if(!is_found) {
-            //     lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
-            //     lock_obj->sentinel = lock_table[combined_key];
-
-            //     /* link node */
-            //     lock_table[combined_key]->tail->prev->next = lock_obj;
-            //     lock_obj->prev = lock_table[combined_key]->tail->prev;
-            //     lock_obj->next = lock_table[combined_key]->tail;
-            //     lock_table[combined_key]->tail->prev = lock_obj;
-
-            //     ret_obj = lock_obj;
-            // }
-
-            // while(is_conflict(ret_obj)) 
-            //     pthread_cond_wait(&ret_obj->cond, &lock_table_latch);
-
             // Project 4 implementation below.
             /* there is already lock object */
             lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);
@@ -211,10 +151,6 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
             lock_obj->next = lock_table[combined_key]->tail;
             lock_table[combined_key]->tail->prev->next = lock_obj;
             lock_table[combined_key]->tail->prev = lock_obj;
-
-            //print_all_locks(lock_table[combined_key]);
-
-            trx_manager.add_action(trx_id, lock_obj);
 
             ret_obj = lock_obj;
         }
@@ -228,8 +164,6 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
             lock_obj->prev = lock_table[combined_key]->head;
             lock_obj->next = lock_table[combined_key]->tail;
             lock_table[combined_key]->tail->prev = lock_obj;
-
-            trx_manager.add_action(trx_id, lock_obj);
 
             ret_obj = lock_obj;
         }

@@ -36,7 +36,6 @@ class TrxManager {
         };
         
         std::unordered_map<int, lock_t*> trx_table;
-        std::unordered_map<int, lock_t*> tail_trx_table;
         std::vector<std::set<int>> trx_adj;
         std::unordered_map<int, std::stack<log_t>> trx_log_table;
 
@@ -71,5 +70,7 @@ int trx_begin();
  * @param trx_id Transaction id to commit.
  */
 int trx_commit(int trx_id);
+
+void trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int trx_id, int lock_mode);
 
 #endif
