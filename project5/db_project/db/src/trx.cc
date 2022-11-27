@@ -43,8 +43,6 @@ void TrxManager::remove_trx(int trx_id) {
     tail_trx_table.erase(trx_id);
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
-    pthread_mutex_lock(&trx_manager_latch);
-
     if(trx_table[trx_id] == nullptr) {
         trx_table[trx_id] = lock_obj;
         lock_obj->next_trx_lock_obj = nullptr;
@@ -55,8 +53,6 @@ void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
         lock_obj->next_trx_lock_obj = nullptr;
         tail_trx_table[trx_id] = lock_obj;
     }
-    
-    pthread_mutex_unlock(&trx_manager_latch);
 }
 
 // TODO : Transaction abort control (deadlock)

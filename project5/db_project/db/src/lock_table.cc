@@ -9,11 +9,24 @@ std::unordered_map<int64_t, lock_table_entry_t*> lock_table;
 
 pthread_mutex_t lock_table_latch;
 
+void print_all_locks(lock_table_entry_t* entry) {
+    lock_t* lock = entry->head->next;
+
+    std::cout << "lock list print start" << std::endl;
+    while(lock != entry->tail) {
+        std::cout << lock->record_id << "r, " << lock->owner_trx_id << "t, " << (lock->lock_mode == 0 ? "S" : "X") << std::endl;
+        lock = lock->next;
+    }
+    std::cout << "lock list print end" << std::endl;
+}
+
 void unlink_and_awake_threads(lock_t* lock_obj) {
     lock_t* cur_lock_obj = lock_obj->next;
     
     lock_obj->prev->next = lock_obj->next;
     lock_obj->next->prev = lock_obj->prev;
+
+    int cnt = 0;
 
     while(cur_lock_obj != lock_obj->sentinel->tail) {
         if(lock_obj->lock_mode == EXCLUSIVE_LOCK
@@ -34,6 +47,35 @@ void unlink_and_awake_threads(lock_t* lock_obj) {
                 break;
             }
         }
+
+        // if(cur_lock_obj->record_id != lock_obj->record_id) {
+        //     cur_lock_obj = cur_lock_obj->next;
+        //     continue;
+        // }
+
+        // if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+        //     if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
+        //     && cnt == 0) {
+        //         pthread_cond_signal(&cur_lock_obj->cond);
+        //         break;
+        //     }
+        //     else if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
+        //     && cnt) {
+        //         break;
+        //     }
+        //     else if(cur_lock_obj->lock_mode == SHARED_LOCK) {
+        //         pthread_cond_signal(&cur_lock_obj->cond);
+        //         cnt++;
+        //     }
+        // }
+        // else if(lock_obj->lock_mode == SHARED_LOCK) {
+        //     if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+        //         pthread_cond_signal(&cur_lock_obj->cond);
+        //         break;
+        //     }
+        // }
+            
+        // TODO : X락 해제 -> 모든 S락을 풀어주기 or 하나의 X락을 풀어주기 | S락 해제 -> 하나의 X락만 풀어주기
 
         cur_lock_obj = cur_lock_obj->next;
     }
@@ -88,13 +130,14 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
         lock_obj->next = lock_table[combined_key]->tail;
         lock_table[combined_key]->tail->prev = lock_obj;
 
+        trx_manager.add_action(trx_id, lock_obj);
+
         ret_obj = lock_obj;
     }
 
     // * CASE : there is a combined_key entry.
     else {
-        if(lock_table[combined_key]->tail->prev != lock_table[combined_key]->head) {
-            // // * CASE : there is a S lock in lock table and current lock mode is X.
+        if(lock_table[combined_key]->tail->prev != lock_table[combined_key]->head) {            // // * CASE : there is a S lock in lock table and current lock mode is X.
             // // * add X lock into lock table.
 
             // // * CASE : there is a X lock in lock table and current lock mode is S.
@@ -169,9 +212,9 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
             lock_table[combined_key]->tail->prev->next = lock_obj;
             lock_table[combined_key]->tail->prev = lock_obj;
 
-            /* check conflict */
-            while(is_conflict(lock_obj)) 
-                pthread_cond_wait(&lock_obj->cond, &lock_table_latch);
+            //print_all_locks(lock_table[combined_key]);
+
+            trx_manager.add_action(trx_id, lock_obj);
 
             ret_obj = lock_obj;
         }
@@ -186,19 +229,25 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
             lock_obj->next = lock_table[combined_key]->tail;
             lock_table[combined_key]->tail->prev = lock_obj;
 
+            trx_manager.add_action(trx_id, lock_obj);
+
             ret_obj = lock_obj;
         }
     }
+
+    /* check conflict */
+    while(is_conflict(ret_obj)) {
+        pthread_cond_wait(&ret_obj->cond, &lock_table_latch);
+    }
+
     pthread_mutex_unlock(&lock_table_latch);
 
     return ret_obj;
 };
 
 int lock_release(lock_t* lock_obj) {
-    pthread_mutex_lock(&lock_table_latch);
-    
+    pthread_mutex_lock(&lock_table_latch);    
     unlink_and_awake_threads(lock_obj);
-
     pthread_mutex_unlock(&lock_table_latch);
 
     return 0;

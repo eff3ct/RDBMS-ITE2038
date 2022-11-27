@@ -156,7 +156,8 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
     if(!is_buffer_exist(table_id, pagenum)) {
         /* when buffer is full */
         if(cur_count == max_count) {
-            buffer_t* victim = find_victim(); /* page latch aquired in here */
+            // * page latch aquired in here
+            buffer_t* victim = find_victim(); 
             if(victim->is_dirty) flush_buffer(victim);
             int64_t key = convert_pair_to_key(victim->table_id, victim->pagenum);
             hash_pointer.erase(key);
@@ -211,13 +212,9 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
 }
 
 void BufferManager::buffer_write_page(int64_t table_id, pagenum_t pagenum) {
-    pthread_mutex_lock(&buffer_manager_latch);
-
     if(!is_buffer_exist(table_id, pagenum)) return;
     buffer_t* cur_buf = find_buffer(table_id, pagenum);
     cur_buf->is_dirty = true;
-
-    pthread_mutex_unlock(&buffer_manager_latch);
 }
 
 void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
@@ -238,6 +235,8 @@ void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
     }
 
     buffer_t* header_buf = find_buffer(table_id, 0);
+
+    pthread_mutex_lock(&header_buf->page_latch);
     buffer_write_page(table_id, 0);
 
     page_t free_page;
@@ -248,16 +247,21 @@ void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
     page_io::header::set_next_free_page((page_t*)header_buf->frame, pagenum);
     header_buf->is_dirty = true;
 
+    pthread_mutex_unlock(&header_buf->page_latch);
     pthread_mutex_unlock(&buffer_manager_latch);
 }
 
 pagenum_t BufferManager::buffer_alloc_page(int64_t table_id) {
+    pthread_mutex_lock(&buffer_manager_latch);
     if(!is_buffer_exist(table_id, 0)) {
         pagenum_t new_pagenum = file_alloc_page(table_id);
+        pthread_mutex_unlock(&buffer_manager_latch);
         return new_pagenum;
     }
     
     buffer_t* header_buf = find_buffer(table_id, 0);
+
+    pthread_mutex_lock(&header_buf->page_latch);
     buffer_write_page(table_id, 0);
 
     pagenum_t next_free_page_num = page_io::get_next_free_page((page_t*)header_buf->frame, 0);
@@ -285,6 +289,9 @@ pagenum_t BufferManager::buffer_alloc_page(int64_t table_id) {
     pagenum_t header_next_free_page_num = page_io::get_next_free_page(&free_page, next_free_page_num);
     page_io::header::set_next_free_page((page_t*)header_buf->frame, header_next_free_page_num);
     header_buf->is_dirty = true;
+
+    pthread_mutex_unlock(&header_buf->page_latch);
+    pthread_mutex_unlock(&buffer_manager_latch);
 
     return next_free_page_num;
 }

@@ -147,9 +147,9 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t* val_size, in
     slotnum_t record_id = location_pair.second;
 
     lock_t* lock = lock_acquire(table_id, leaf_page_num, record_id, trx_id, SHARED_LOCK);
-    trx_manager.add_action(trx_id, lock);
 
     buffer_t* page = buffer_manager.buffer_read_page(table_id, leaf_page_num);
+
     *val_size = page_io::leaf::get_record_size((page_t*)page->frame, record_id);
     slotnum_t offset = page_io::leaf::get_offset((page_t*)page->frame, record_id);
     page_io::leaf::get_record((page_t*)page->frame, offset, ret_val, *val_size);
@@ -168,7 +168,6 @@ int db_update(int64_t table_id, int64_t key, char* value, uint16_t new_val_size,
     slotnum_t record_id = location_pair.second;
 
     lock_t* lock = lock_acquire(table_id, page, record_id, trx_id, EXCLUSIVE_LOCK);
-    trx_manager.add_action(trx_id, lock);
 
     buffer_t* cur_page = buffer_manager.buffer_read_page(table_id, page);
     *old_val_size = page_io::leaf::get_record_size((page_t*)cur_page->frame, record_id);
