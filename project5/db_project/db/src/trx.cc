@@ -72,5 +72,9 @@ void trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int t
     lock_t* lock_obj = lock_acquire(table_id, page_id, slot_num, trx_id, lock_mode);
     trx_manager.add_action(trx_id, lock_obj);
 
+    while(is_conflict(lock_obj)) {
+        pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
+    }
+
     pthread_mutex_unlock(&trx_manager_latch);
 }

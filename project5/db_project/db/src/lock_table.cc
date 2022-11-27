@@ -169,11 +169,6 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
         }
     }
 
-    /* check conflict */
-    while(is_conflict(ret_obj)) {
-        pthread_cond_wait(&ret_obj->cond, &lock_table_latch);
-    }
-
     pthread_mutex_unlock(&lock_table_latch);
 
     return ret_obj;
