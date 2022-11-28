@@ -14,6 +14,9 @@ void TrxManager::remove_trx_node(int trx_id) {
     }
 }
 bool TrxManager::is_deadlock(int trx_id) {
+    // just for testing
+    return true;
+
     std::map<int, bool> visited;
     std::map<int, bool> dfs_stk;
 
@@ -79,6 +82,7 @@ void TrxManager::update_graph(lock_t* lock_obj) {
     // find preceding lock
     lock_t* cur_lock_obj = lock_obj->prev;
     while(cur_lock_obj != lock_obj->sentinel->head) {
+        // X / S lock <- X lock
         if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
             if(cur_lock_obj->record_id == lock_obj->record_id
             && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id) {
@@ -92,6 +96,8 @@ void TrxManager::update_graph(lock_t* lock_obj) {
 
             }
         }
+
+        // X lock <- S lock
         else {
             if(cur_lock_obj->record_id == lock_obj->record_id
             && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
