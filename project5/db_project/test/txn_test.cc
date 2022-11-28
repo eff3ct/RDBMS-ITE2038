@@ -386,3 +386,21 @@ void* thread_rnd_write(void* arg) {
 
 //     shutdown_db();
 // }
+
+void* thread_deadlock_test(void* argv) {
+    int64_t table_id = *((int*)argv);
+
+    /* Transaction Begin */
+    int trx_id = trx_begin();
+
+    std::cout << "Transaction " << trx_id << " has been started." << std::endl;
+
+    // deadlock situation.
+    // T1 waits for T2's lock.
+    // T2 waits for T1's lock.
+
+    trx_commit(trx_id);
+    /* Transaction End */
+
+    return NULL;
+}
