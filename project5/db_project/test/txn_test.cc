@@ -260,7 +260,7 @@ void make_random_tree(int64_t tid, int tree_sz, std::vector<std::string>& values
 /*                                  Multi Thread Test                                   */  
 /****************************************************************************************/
 
-#define THREAD_N 10
+#define THREAD_N 500
 #define RD_N 200
 
 pthread_t threads[THREAD_N];
