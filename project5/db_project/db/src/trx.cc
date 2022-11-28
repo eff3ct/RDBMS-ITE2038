@@ -99,6 +99,7 @@ void TrxManager::update_graph(lock_t* lock_obj) {
                 break;
             }
         }
+
         cur_lock_obj = cur_lock_obj->prev;
     }
 }
@@ -111,7 +112,7 @@ void TrxManager::add_log_to_trx(int64_t table_id, pagenum_t page_id, slotnum_t s
     slotnum_t offset = page_io::leaf::get_offset((page_t*)page->frame, slot_num);
     old_val_size = page_io::leaf::get_record_size((page_t*)page->frame, slot_num);
     old_value = new char[old_val_size];
-    page_io::leaf::get_record((page_t*)page->frame, slot_num, old_value, old_val_size);
+    page_io::leaf::get_record((page_t*)page->frame, offset, old_value, old_val_size);
     buffer_manager.unpin_buffer(table_id, page_id);
 
     trx_log_table[trx_id].push({std::string(old_value, old_val_size), old_val_size, table_id, page_id, slot_num});
