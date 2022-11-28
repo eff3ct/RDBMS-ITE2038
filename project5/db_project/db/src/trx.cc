@@ -3,6 +3,8 @@
 #include <iostream>
 
 pthread_mutex_t trx_manager_latch = PTHREAD_MUTEX_INITIALIZER;
+extern pthread_mutex_t lock_table_latch;
+
 int64_t global_trx_id;
 TrxManager trx_manager;
 
@@ -13,27 +15,23 @@ void TrxManager::remove_trx_node(int trx_id) {
         adj.erase(trx_id);
     }
 }
-bool TrxManager::is_deadlock(int trx_id) {
-    // just for testing
-    return true;
+bool TrxManager::dfs(int u, std::map<int, bool>& visited, std::map<int, bool>& dfs_stk) {
+    visited[u] = true;
+    dfs_stk[u] = true;
 
+    for(const int& v : trx_adj[u]) {
+        if(!visited[v] && dfs(v, visited, dfs_stk)) return true;
+        else if(dfs_stk[v]) return true;
+    }
+
+    dfs_stk[u] = false;
+    return false;
+}
+bool TrxManager::is_deadlock(int trx_id) {
     std::map<int, bool> visited;
     std::map<int, bool> dfs_stk;
 
-    std::function<bool(int)> dfs = [&](int u) {
-        visited[u] = true;
-        dfs_stk[u] = true;
-
-        for(const int& v : trx_adj[u]) {
-            if(!visited[v] && dfs(v)) return true;
-            else if(dfs_stk[v]) return true;
-        }
-
-        dfs_stk[u] = false;
-        return false;
-    };
-
-    return dfs(trx_id);
+    return dfs(trx_id, visited, dfs_stk);
 }
 void TrxManager::undo_actions(int trx_id) {
     auto& log_stack = trx_log_table[trx_id];
@@ -56,6 +54,7 @@ void TrxManager::start_trx(int trx_id) {
     trx_table.insert({trx_id, nullptr});
 }
 void TrxManager::remove_trx(int trx_id) {
+    pthread_mutex_lock(&lock_table_latch);
     lock_t* cur_lock_obj = trx_table[trx_id];
 
     while(cur_lock_obj != nullptr) {
@@ -64,21 +63,28 @@ void TrxManager::remove_trx(int trx_id) {
         cur_lock_obj = next_lock_obj;
     }
 
+    pthread_mutex_unlock(&lock_table_latch);
+
     remove_trx_node(trx_id);
     trx_log_table.erase(trx_id);
 
     trx_table.erase(trx_id);
 }
 void TrxManager::abort_trx(int trx_id) {
-    remove_trx_node(trx_id);
     undo_actions(trx_id);
     remove_trx(trx_id);
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
+    pthread_mutex_lock(&lock_table_latch);
+
     lock_obj->next_trx_lock_obj = trx_table[trx_id];
     trx_table[trx_id] = lock_obj;
+
+    pthread_mutex_unlock(&lock_table_latch);
 }
 void TrxManager::update_graph(lock_t* lock_obj) {
+    pthread_mutex_lock(&lock_table_latch);
+
     // find preceding lock
     lock_t* cur_lock_obj = lock_obj->prev;
     while(cur_lock_obj != lock_obj->sentinel->head) {
@@ -109,6 +115,8 @@ void TrxManager::update_graph(lock_t* lock_obj) {
 
         cur_lock_obj = cur_lock_obj->prev;
     }
+
+    pthread_mutex_unlock(&lock_table_latch);
 }
 void TrxManager::add_log_to_trx(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int trx_id) {
     char* old_value = nullptr;
@@ -163,7 +171,7 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
     }
 
-    if(lock_mode == EXCLUSIVE_LOCK)
+    if(lock_mode == EXCLUSIVE_LOCK) 
         trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
 
     pthread_mutex_unlock(&trx_manager_latch);

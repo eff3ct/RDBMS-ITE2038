@@ -129,9 +129,6 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
 };
 
 int lock_release(lock_t* lock_obj) {
-    pthread_mutex_lock(&lock_table_latch);    
     unlink_and_awake_threads(lock_obj);
-    pthread_mutex_unlock(&lock_table_latch);
-
     return 0;
 }
