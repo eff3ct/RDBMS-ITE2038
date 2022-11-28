@@ -156,7 +156,8 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
     }
 
-    trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
+    if(lock_mode == EXCLUSIVE_LOCK)
+        trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
 
     pthread_mutex_unlock(&trx_manager_latch);
 
