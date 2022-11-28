@@ -21,7 +21,7 @@ void print_all_locks(lock_table_entry_t* entry) {
 }
 
 void unlink_and_awake_threads(lock_t* lock_obj) {
-    lock_t* cur_lock_obj = lock_obj->next;
+    lock_t* cur_lock_obj = lock_obj->sentinel->head->next;
     
     lock_obj->prev->next = lock_obj->next;
     lock_obj->next->prev = lock_obj->prev;
@@ -35,8 +35,6 @@ void unlink_and_awake_threads(lock_t* lock_obj) {
 }
  
 bool is_conflict(lock_t* lock_obj) {
-    pthread_mutex_lock(&lock_table_latch);
-
     lock_t* cur_lock_obj = lock_obj->prev;
 
     while(cur_lock_obj != lock_obj->sentinel->head) {
@@ -58,9 +56,7 @@ bool is_conflict(lock_t* lock_obj) {
 
         cur_lock_obj = cur_lock_obj->prev;
     }
-
-    pthread_mutex_unlock(&lock_table_latch);
-
+    
     return false;
 }
 

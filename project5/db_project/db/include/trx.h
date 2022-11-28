@@ -46,6 +46,8 @@ class TrxManager {
         bool dfs(int u, std::map<int, bool>& visited, std::map<int, bool>& dfs_stk);
         
     public:
+        // print adj
+        void print_adj();
         // add log
         void add_log_to_trx(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int trx_id);
         // update wait for graph

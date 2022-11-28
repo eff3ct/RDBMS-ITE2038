@@ -31,6 +31,8 @@ bool TrxManager::is_deadlock(int trx_id) {
     std::map<int, bool> visited;
     std::map<int, bool> dfs_stk;
 
+    if(trx_adj.find(trx_id) == trx_adj.end()) return false;
+
     return dfs(trx_id, visited, dfs_stk);
 }
 void TrxManager::undo_actions(int trx_id) {
@@ -133,6 +135,17 @@ void TrxManager::add_log_to_trx(int64_t table_id, pagenum_t page_id, slotnum_t s
     trx_log_table[trx_id].push({std::string(old_value, old_val_size), old_val_size, table_id, page_id, slot_num});
     delete[] old_value;
 }
+void TrxManager::print_adj() {
+    std::cout << "print adj" << std::endl;
+    for(auto& node : trx_adj) {
+        std::cout << "trx_id: " << node.first << " -> ";
+        for(auto& adj_trx_id : node.second) {
+            std::cout << adj_trx_id << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << "print adj end" << std::endl;
+}
 
 int trx_begin() {
     pthread_mutex_lock(&trx_manager_latch);
@@ -160,13 +173,13 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
     lock_t* lock_obj = lock_acquire(table_id, page_id, slot_num, trx_id, lock_mode);
     trx_manager.add_action(trx_id, lock_obj);
     trx_manager.update_graph(lock_obj);
-    
+
     if(trx_manager.is_deadlock(trx_id)) {
         trx_manager.abort_trx(trx_id);
         pthread_mutex_unlock(&trx_manager_latch);
         return -1;
     }
-    
+
     while(is_conflict(lock_obj)) {
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
     }
@@ -175,6 +188,5 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
         trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
 
     pthread_mutex_unlock(&trx_manager_latch);
-
     return 0;
 }

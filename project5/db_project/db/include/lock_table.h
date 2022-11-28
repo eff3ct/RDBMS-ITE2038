@@ -62,6 +62,7 @@ struct lock_table_entry_t {
     }
 };
 
+void print_all_locks(lock_table_entry_t* entry);
 void unlink_and_awake_threads(lock_t* lock_obj);
 bool is_conflict(lock_t* lock_obj);
 
