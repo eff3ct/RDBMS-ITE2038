@@ -61,7 +61,7 @@ void TrxManager::remove_trx(int trx_id) {
         cur_lock_obj = next_lock_obj;
     }
 
-    remove_trx_node(trx_id);
+    // remove_trx_node(trx_id);
 
     trx_table.erase(trx_id);
 }
