@@ -35,12 +35,14 @@ void unlink_and_awake_threads(lock_t* lock_obj) {
 }
  
 bool is_conflict(lock_t* lock_obj) {
+    pthread_mutex_lock(&lock_table_latch);
     lock_t* cur_lock_obj = lock_obj->prev;
 
     while(cur_lock_obj != lock_obj->sentinel->head) {
         if(lock_obj->lock_mode == EXCLUSIVE_LOCK
         && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
             if(cur_lock_obj->record_id == lock_obj->record_id) {
+                pthread_mutex_unlock(&lock_table_latch);
                 return true;
             }
         }
@@ -48,12 +50,14 @@ bool is_conflict(lock_t* lock_obj) {
         && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
             if(cur_lock_obj->record_id == lock_obj->record_id
             && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+                pthread_mutex_unlock(&lock_table_latch);
                 return true;
             }
         }
 
         cur_lock_obj = cur_lock_obj->prev;
     }
+    pthread_mutex_unlock(&lock_table_latch);
 
     return false;
 }

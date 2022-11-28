@@ -44,7 +44,7 @@ void TrxManager::undo_actions(int trx_id) {
         buffer_t* page = buffer_manager.buffer_read_page(log.table_id, log.page_id);
         buffer_manager.buffer_write_page(log.table_id, log.page_id);
         slotnum_t offset = page_io::leaf::get_offset((page_t*)page->frame, log.slot_num);
-        page_io::leaf::set_record((page_t*)page->frame, log.slot_num, log.old_value.c_str(), log.old_val_size);
+        page_io::leaf::set_record((page_t*)page->frame, offset, log.old_value.c_str(), log.old_val_size);
         buffer_manager.unpin_buffer(log.table_id, log.page_id);
 
         log_stack.pop();
@@ -77,12 +77,8 @@ void TrxManager::abort_trx(int trx_id) {
     remove_trx(trx_id);
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
-    pthread_mutex_lock(&lock_table_latch);
-
     lock_obj->next_trx_lock_obj = trx_table[trx_id];
     trx_table[trx_id] = lock_obj;
-
-    pthread_mutex_unlock(&lock_table_latch);
 }
 void TrxManager::update_graph(lock_t* lock_obj) {
     pthread_mutex_lock(&lock_table_latch);
@@ -125,7 +121,6 @@ void TrxManager::add_log_to_trx(int64_t table_id, pagenum_t page_id, slotnum_t s
     int old_val_size;
 
     buffer_t* page = buffer_manager.buffer_read_page(table_id, page_id);
-    buffer_manager.buffer_write_page(table_id, page_id);
     slotnum_t offset = page_io::leaf::get_offset((page_t*)page->frame, slot_num);
     old_val_size = page_io::leaf::get_record_size((page_t*)page->frame, slot_num);
     old_value = new char[old_val_size];
@@ -168,9 +163,10 @@ int trx_commit(int trx_id) {
 }
 
 int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int trx_id, int lock_mode) {
+    lock_t* lock_obj = lock_acquire(table_id, page_id, slot_num, trx_id, lock_mode);
+
     pthread_mutex_lock(&trx_manager_latch);
 
-    lock_t* lock_obj = lock_acquire(table_id, page_id, slot_num, trx_id, lock_mode);
     trx_manager.add_action(trx_id, lock_obj);
     trx_manager.update_graph(lock_obj);
 
@@ -184,8 +180,7 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
     }
 
-    if(lock_mode == EXCLUSIVE_LOCK) 
-        trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
+    trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
 
     pthread_mutex_unlock(&trx_manager_latch);
     return 0;
