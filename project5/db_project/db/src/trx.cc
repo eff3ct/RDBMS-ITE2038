@@ -14,9 +14,6 @@ void TrxManager::remove_trx_node(int trx_id) {
     }
 }
 bool TrxManager::is_deadlock(int trx_id) {
-    // just for testing
-    return true;
-
     std::map<int, bool> visited;
     std::map<int, bool> dfs_stk;
 
