@@ -61,6 +61,8 @@ void TrxManager::remove_trx(int trx_id) {
         cur_lock_obj = next_lock_obj;
     }
 
+    remove_trx_node(trx_id);
+
     trx_table.erase(trx_id);
 }
 void TrxManager::abort_trx(int trx_id) {
@@ -76,11 +78,26 @@ void TrxManager::update_graph(lock_t* lock_obj) {
     // find preceding lock
     lock_t* cur_lock_obj = lock_obj->prev;
     while(cur_lock_obj != lock_obj->sentinel->head) {
-        if(cur_lock_obj->record_id == lock_obj->record_id
-        && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
-        && (cur_lock_obj->lock_mode == EXCLUSIVE_LOCK || (cur_lock_obj->lock_mode == SHARED_LOCK && lock_obj->lock_mode == EXCLUSIVE_LOCK) )) {
-            trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
-            break;
+        if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+            if(cur_lock_obj->record_id == lock_obj->record_id
+            && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id) {
+
+                if(cur_lock_obj->lock_mode == SHARED_LOCK)
+                    trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
+                else if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+                    trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
+                    break;
+                }
+
+            }
+        }
+        else {
+            if(cur_lock_obj->record_id == lock_obj->record_id
+            && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
+            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+                trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
+                break;
+            }
         }
         cur_lock_obj = cur_lock_obj->prev;
     }
