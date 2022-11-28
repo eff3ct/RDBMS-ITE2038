@@ -62,6 +62,7 @@ void TrxManager::remove_trx(int trx_id) {
     }
 
     remove_trx_node(trx_id);
+    trx_log_table.erase(trx_id);
 
     trx_table.erase(trx_id);
 }
