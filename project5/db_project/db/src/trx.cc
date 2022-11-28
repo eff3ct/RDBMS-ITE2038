@@ -144,20 +144,20 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
 
     lock_t* lock_obj = lock_acquire(table_id, page_id, slot_num, trx_id, lock_mode);
     trx_manager.add_action(trx_id, lock_obj);
-    trx_manager.update_graph(lock_obj);
+    // trx_manager.update_graph(lock_obj);
     
-    if(trx_manager.is_deadlock(trx_id)) {
-        trx_manager.abort_trx(trx_id);
-        pthread_mutex_unlock(&trx_manager_latch);
-        return -1;
-    }
+    // if(trx_manager.is_deadlock(trx_id)) {
+    //     trx_manager.abort_trx(trx_id);
+    //     pthread_mutex_unlock(&trx_manager_latch);
+    //     return -1;
+    // }
     
     while(is_conflict(lock_obj)) {
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
     }
 
-    if(lock_mode == EXCLUSIVE_LOCK)
-        trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
+    // if(lock_mode == EXCLUSIVE_LOCK)
+    //     trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
 
     pthread_mutex_unlock(&trx_manager_latch);
 
