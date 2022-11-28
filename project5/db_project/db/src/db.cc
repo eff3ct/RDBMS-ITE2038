@@ -139,14 +139,14 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t* val_size, in
     auto location_pair = find(table_id, root, key);
     
     if(location_pair == std::pair<pagenum_t, slotnum_t>({0, 0})) {
-        // trx_manager.abort_trx(trx_id);
         return -1;
     }
     
     pagenum_t leaf_page_num = location_pair.first;
     slotnum_t record_id = location_pair.second;
 
-    trx_get_lock(table_id, leaf_page_num, record_id, trx_id, SHARED_LOCK);
+    int flag = trx_get_lock(table_id, leaf_page_num, record_id, trx_id, SHARED_LOCK);
+    if(flag < 0) return -1;
 
     buffer_t* page = buffer_manager.buffer_read_page(table_id, leaf_page_num);
 
@@ -167,7 +167,8 @@ int db_update(int64_t table_id, int64_t key, char* value, uint16_t new_val_size,
     pagenum_t page = location_pair.first;
     slotnum_t record_id = location_pair.second;
 
-    trx_get_lock(table_id, page, record_id, trx_id, EXCLUSIVE_LOCK);
+    int flag = trx_get_lock(table_id, page, record_id, trx_id, EXCLUSIVE_LOCK);
+    if(flag < 0) return -1;
 
     buffer_t* cur_page = buffer_manager.buffer_read_page(table_id, page);
     *old_val_size = page_io::leaf::get_record_size((page_t*)cur_page->frame, record_id);
