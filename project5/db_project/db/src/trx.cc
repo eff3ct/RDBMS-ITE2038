@@ -71,12 +71,12 @@ void TrxManager::remove_trx(int trx_id) {
         cur_lock_obj = next_lock_obj;
     }
 
-    pthread_mutex_unlock(&lock_table_latch);
-
     remove_trx_node(trx_id);
     trx_log_table.erase(trx_id);
-
     trx_table.erase(trx_id);
+
+    pthread_mutex_unlock(&lock_table_latch);
+
 }
 void TrxManager::abort_trx(int trx_id) {
     undo_actions(trx_id);
