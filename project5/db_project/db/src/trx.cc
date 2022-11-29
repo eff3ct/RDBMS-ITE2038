@@ -58,7 +58,7 @@ void TrxManager::undo_actions(int trx_id) {
 
     trx_log_table.erase(trx_id);
 }
-void TrxManager::start_trx(int trx_id) {
+void TrxManager::   start_trx(int trx_id) {
     trx_table.insert({trx_id, nullptr});
 }
 void TrxManager::remove_trx(int trx_id) {
@@ -188,7 +188,8 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
         std::cout << "wake : " << trx_id << std::endl;
     }
 
-    trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
+    if(lock_mode == EXCLUSIVE_LOCK)
+        trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
 
     pthread_mutex_unlock(&trx_manager_latch);
     return 0;
