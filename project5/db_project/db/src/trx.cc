@@ -58,7 +58,7 @@ void TrxManager::undo_actions(int trx_id) {
 
     trx_log_table.erase(trx_id);
 }
-void TrxManager::   start_trx(int trx_id) {
+void TrxManager::start_trx(int trx_id) {
     trx_table.insert({trx_id, nullptr});
 }
 void TrxManager::remove_trx(int trx_id) {
@@ -83,8 +83,10 @@ void TrxManager::abort_trx(int trx_id) {
     remove_trx(trx_id);
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
+    pthread_mutex_lock(&lock_table_latch);
     lock_obj->next_trx_lock_obj = trx_table[trx_id];
     trx_table[trx_id] = lock_obj;
+    pthread_mutex_unlock(&lock_table_latch);
 }
 void TrxManager::update_graph(lock_t* lock_obj) {
     pthread_mutex_lock(&lock_table_latch);

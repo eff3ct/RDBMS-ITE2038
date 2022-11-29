@@ -20,16 +20,31 @@ void print_all_locks(lock_table_entry_t* entry) {
     std::cout << "lock list print end" << std::endl;
 }
 
-void unlink_and_awake_threads(lock_t* lock_obj) {
+void unlink_and_wake_threads(lock_t* lock_obj) {
     lock_t* cur_lock_obj = lock_obj->sentinel->head->next;
-    
-    lock_obj->prev->next = lock_obj->next;
-    lock_obj->next->prev = lock_obj->prev;
 
+    bool flag = false;
     while(cur_lock_obj != lock_obj->sentinel->tail) {
-        pthread_cond_signal(&cur_lock_obj->cond);
+        if(cur_lock_obj->record_id != lock_obj->record_id
+        || cur_lock_obj->owner_trx_id == lock_obj->owner_trx_id) {
+            cur_lock_obj = cur_lock_obj->next;
+            continue;
+        }
+
+        if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+            if(!flag) pthread_cond_signal(&cur_lock_obj->cond);
+            break;
+        }
+        else {
+            pthread_cond_signal(&cur_lock_obj->cond);
+            flag = true;
+        }
+
         cur_lock_obj = cur_lock_obj->next;
     }
+        
+    lock_obj->prev->next = lock_obj->next;
+    lock_obj->next->prev = lock_obj->prev;
 
     delete lock_obj;
 }
@@ -176,6 +191,6 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
 };
 
 int lock_release(lock_t* lock_obj) {
-    unlink_and_awake_threads(lock_obj);
+    unlink_and_wake_threads(lock_obj);
     return 0;
 }
