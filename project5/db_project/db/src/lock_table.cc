@@ -25,21 +25,20 @@ void unlink_and_wake_threads(lock_t* lock_obj) {
 
     bool flag = false;
     while(cur_lock_obj != lock_obj->sentinel->tail) {
-        // if(cur_lock_obj->record_id != lock_obj->record_id
-        // || cur_lock_obj->owner_trx_id == lock_obj->owner_trx_id) {
-        //     cur_lock_obj = cur_lock_obj->next;
-        //     continue;
-        // }
+        if(cur_lock_obj->record_id != lock_obj->record_id
+        || cur_lock_obj->owner_trx_id == lock_obj->owner_trx_id) {
+            cur_lock_obj = cur_lock_obj->next;
+            continue;
+        }
 
-        // if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-        //     if(!flag) pthread_cond_signal(&cur_lock_obj->cond);
-        //     break;
-        // }
-        // else {
-        //     pthread_cond_signal(&cur_lock_obj->cond);
-        //     flag = true;
-        // }
-        pthread_cond_signal(&cur_lock_obj->cond);
+        if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+            if(!flag) pthread_cond_signal(&cur_lock_obj->cond);
+            break;
+        }
+        else {
+            pthread_cond_signal(&cur_lock_obj->cond);
+            flag = true;
+        }
 
         cur_lock_obj = cur_lock_obj->next;
     }
