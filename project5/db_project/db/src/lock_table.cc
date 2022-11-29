@@ -92,7 +92,41 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
 
     // * CASE : there is a combined_key entry.
     else {
-        if(lock_table[combined_key]->tail->prev != lock_table[combined_key]->head) { 
+        if(lock_table[combined_key]->tail->prev != lock_table[combined_key]->head) {
+            // check already lock exists in lock table.
+            bool flag = false;
+
+            if(lock_mode == SHARED_LOCK) {
+                lock_t* cur_lock_obj = lock_table[combined_key]->head->next;
+                while(cur_lock_obj != lock_table[combined_key]->tail) {
+                    if(cur_lock_obj->owner_trx_id == trx_id
+                    && cur_lock_obj->record_id == key) {
+                        flag = true;
+                        ret_obj = nullptr;
+                        break;
+                    }
+                    cur_lock_obj = cur_lock_obj->next;
+                }
+            }
+            else {
+                lock_t* cur_lock_obj = lock_table[combined_key]->head->next;
+                while(cur_lock_obj != lock_table[combined_key]->tail) {
+                    if(cur_lock_obj->owner_trx_id == trx_id
+                    && cur_lock_obj->record_id == key
+                    && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+                        flag = true;
+                        ret_obj = nullptr;
+                        break;
+                    }
+                    cur_lock_obj = cur_lock_obj->next;
+                }
+            }
+
+            if(flag) {
+                pthread_mutex_unlock(&lock_table_latch);
+                return ret_obj;
+            }
+
             // Project 4 implementation below.
             /* there is already lock object */
             lock_t* lock_obj = new lock_t(key, trx_id, lock_mode);

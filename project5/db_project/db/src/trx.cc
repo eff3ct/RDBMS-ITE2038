@@ -123,6 +123,8 @@ void TrxManager::update_graph(lock_t* lock_obj) {
     pthread_mutex_unlock(&lock_table_latch);
 }
 void TrxManager::add_log_to_trx(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int trx_id) {
+    pthread_mutex_lock(&trx_manager_latch);
+
     char* old_value = nullptr;
     int old_val_size;
 
@@ -135,6 +137,8 @@ void TrxManager::add_log_to_trx(int64_t table_id, pagenum_t page_id, slotnum_t s
 
     trx_log_table[trx_id].push({std::string(old_value, old_val_size), old_val_size, table_id, page_id, slot_num});
     delete[] old_value;
+
+    pthread_mutex_unlock(&trx_manager_latch);
 }
 void TrxManager::print_adj() {
     std::cout << "print adj" << std::endl;
@@ -171,6 +175,9 @@ int trx_commit(int trx_id) {
 int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int trx_id, int lock_mode) {
     lock_t* lock_obj = lock_acquire(table_id, page_id, slot_num, trx_id, lock_mode);
 
+    // transaction already has a lock on the record.
+    if(lock_obj == nullptr) return 0;
+    
     pthread_mutex_lock(&trx_manager_latch);
 
     trx_manager.add_action(trx_id, lock_obj);
@@ -183,13 +190,8 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
     }
 
     while(is_conflict(lock_obj)) {
-        std::cout << "wait : " << trx_id << std::endl;
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
-        std::cout << "wake : " << trx_id << std::endl;
     }
-
-    if(lock_mode == EXCLUSIVE_LOCK)
-        trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);
 
     pthread_mutex_unlock(&trx_manager_latch);
     return 0;

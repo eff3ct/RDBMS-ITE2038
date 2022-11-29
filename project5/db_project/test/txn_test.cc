@@ -26,6 +26,9 @@ std::string get_random_string(int length) {
 }
 
 void make_random_tree(int64_t tid, int tree_sz, std::vector<std::string>& values, std::vector<int64_t>& keys) {
+    keys = {};
+    values = {};
+
     for(int i = 0; i < tree_sz; ++i) {
         keys.push_back(i);
     }
@@ -332,75 +335,4 @@ TEST(MultiThreadTxnTest, SLockOnlyTest) {
     shutdown_db();
 }
 
-void* thread_rnd_write(void* arg) {
-    int64_t table_id = *((int*)arg);
-
-    /* Transaction Begin */
-    int trx_id = trx_begin();
-    EXPECT_GT(trx_id, 0);
-
-    std::cout << "Transaction " << trx_id << " has been started." << std::endl;
-
-    for(int i = 0; i < RD_N; ++i) {
-        int64_t key = multi_rd_keys[i];
-        int flag = db_update(table_id, key, (char*)multi_rd_values[i].c_str(), multi_rd_values[i].size(), NULL, trx_id);
-
-        EXPECT_EQ(flag, 0)
-            << "db_update \\w trx failed | index : " << i << " | key : " << key << '\n';
-    }
-
-    std::cout << "Try to commit Transaction " << trx_id << std::endl;
-    EXPECT_EQ(trx_commit(trx_id), trx_id)
-        << "trx_commit failed | trx_id : " << trx_id << '\n';
-    /* Transaction End */
-
-    return NULL;
-}
-
-// TEST(MultiThreadTxnTest, XLockOnlyNoDeadLockTest) {
-//     multi_rd_keys = {}, multi_rd_values = {};
-//     const char* path_multi_thread_wr = "multi_thread_wr.db";
-
-//     if(!std::remove(path_multi_thread_wr)) 
-//         std::cout << "File " << path_multi_thread_wr << " has been removed." << std::endl;
-//     int64_t table_id = open_table(path_multi_thread_wr);
-
-//     init_db(64);
-//     make_random_tree(table_id, 20000, multi_rd_values, multi_rd_keys);
-//     std::cout << "Random tree has been created." << std::endl;
-//     shutdown_db();
-
-//     int64_t* tid = new int64_t;
-//     *tid = open_table(path_multi_thread_wr);
-
-//     init_db(64);
-//     for(int i = 0; i < THREAD_N; ++i) {
-//         pthread_create(&threads[i], 0, thread_rnd_write, tid);
-//     }
-    
-//     for(int i = 0; i < THREAD_N; ++i) {
-//         pthread_join(threads[i], NULL);
-//     }
-
-//     delete tid;
-
-//     shutdown_db();
-// }
-
-void* thread_deadlock_test(void* argv) {
-    int64_t table_id = *((int*)argv);
-
-    /* Transaction Begin */
-    int trx_id = trx_begin();
-
-    std::cout << "Transaction " << trx_id << " has been started." << std::endl;
-
-    // deadlock situation.
-    // T1 waits for T2's lock.
-    // T2 waits for T1's lock.
-
-    trx_commit(trx_id);
-    /* Transaction End */
-
-    return NULL;
-}
+#define WRR_N 500
