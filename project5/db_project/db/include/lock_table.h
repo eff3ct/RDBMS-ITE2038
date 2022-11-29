@@ -60,6 +60,11 @@ struct lock_table_entry_t {
         this->head->next = this->tail;
         this->tail->prev = this->head;
     }
+
+    ~lock_table_entry_t() {
+        delete head;
+        delete tail;
+    }
 };
 
 void print_all_locks(lock_table_entry_t* entry);

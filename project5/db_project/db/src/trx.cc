@@ -8,6 +8,12 @@ extern pthread_mutex_t lock_table_latch;
 int64_t global_trx_id;
 TrxManager trx_manager;
 
+void TrxManager::init() {
+    global_trx_id = 0;
+    trx_table = {};
+    trx_adj = {};
+    trx_log_table = {};
+}
 void TrxManager::remove_trx_node(int trx_id) {
     trx_adj.erase(trx_id);
     for(auto& node : trx_adj) {
@@ -177,7 +183,9 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
     }
 
     while(is_conflict(lock_obj)) {
+        std::cout << "wait : " << trx_id << std::endl;
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
+        std::cout << "wake : " << trx_id << std::endl;
     }
 
     trx_manager.add_log_to_trx(table_id, page_id, slot_num, trx_id);

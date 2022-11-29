@@ -114,6 +114,7 @@ std::vector<int64_t>* keys, std::vector<char*>* values, std::vector<uint16_t>* v
 int init_db(int num_buf) {
     init_lock_table();
     buffer_manager.init_buf(num_buf);
+    trx_manager.init();
     return 0;
 }
 

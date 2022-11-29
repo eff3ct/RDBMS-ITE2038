@@ -46,6 +46,8 @@ class TrxManager {
         bool dfs(int u, std::map<int, bool>& visited, std::map<int, bool>& dfs_stk);
         
     public:
+        // initialize transaction manager
+        void init();
         // print adj
         void print_adj();
         // add log
