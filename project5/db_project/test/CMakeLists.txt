@@ -15,7 +15,7 @@ set(DB_TESTS
   # insertion_test.cc
   # deletion_test.cc
   # txn_test__.cc
-  txn_test.cc
+  # txn_test.cc
   )
 
 add_executable(db_test ${DB_TESTS})

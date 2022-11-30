@@ -22,31 +22,34 @@ void print_all_locks(lock_table_entry_t* entry) {
 
 void unlink_and_wake_threads(lock_t* lock_obj) {
     lock_t* cur_lock_obj = lock_obj->sentinel->head->next;
+    if(cur_lock_obj == lock_obj) cur_lock_obj = cur_lock_obj->next;
+    lock_t* tail = lock_obj->sentinel->tail;
+    pagenum_t record_id = lock_obj->record_id;
+    int owner_trx_id = lock_obj->owner_trx_id;
 
-    bool flag = false;
-    while(cur_lock_obj != lock_obj->sentinel->tail) {
-        if(cur_lock_obj->record_id != lock_obj->record_id
-        || cur_lock_obj->owner_trx_id == lock_obj->owner_trx_id) {
-            cur_lock_obj = cur_lock_obj->next;
-            continue;
-        }
-
-        if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-            if(!flag) pthread_cond_signal(&cur_lock_obj->cond);
-            break;
-        }
-        else {
-            pthread_cond_signal(&cur_lock_obj->cond);
-            flag = true;
-        }
-
-        cur_lock_obj = cur_lock_obj->next;
-    }
-        
     lock_obj->prev->next = lock_obj->next;
     lock_obj->next->prev = lock_obj->prev;
 
     delete lock_obj;
+
+    while(cur_lock_obj != tail) {
+        if(cur_lock_obj->record_id != record_id
+        || cur_lock_obj->owner_trx_id == owner_trx_id) {
+            cur_lock_obj = cur_lock_obj->next;
+            continue;
+        }
+
+        // X -> X, X -> S -> ... -> S -> X, S -> S -> ... -> S -> X
+        if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+            pthread_cond_signal(&cur_lock_obj->cond);
+            break;
+        }
+        else {
+            pthread_cond_signal(&cur_lock_obj->cond);
+        }
+
+        cur_lock_obj = cur_lock_obj->next;
+    }
 }
  
 bool is_conflict(lock_t* lock_obj) {
