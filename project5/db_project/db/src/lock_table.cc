@@ -39,14 +39,7 @@ void unlink_and_wake_threads(lock_t* lock_obj) {
             continue;
         }
 
-        // X -> X, X -> S -> ... -> S -> X, S -> S -> ... -> S -> X
-        if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-            pthread_cond_signal(&cur_lock_obj->cond);
-            break;
-        }
-        else {
-            pthread_cond_signal(&cur_lock_obj->cond);
-        }
+        pthread_cond_signal(&cur_lock_obj->cond);
 
         cur_lock_obj = cur_lock_obj->next;
     }

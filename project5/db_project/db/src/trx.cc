@@ -91,36 +91,22 @@ void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
 void TrxManager::update_graph(lock_t* lock_obj) {
     pthread_mutex_lock(&lock_table_latch);
 
-    int s_lock_cnt = 0;
     // find preceding lock
     lock_t* cur_lock_obj = lock_obj->prev;
     while(cur_lock_obj != lock_obj->sentinel->head) {
-        // X / S lock <- X lock
-        if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-            if(cur_lock_obj->record_id == lock_obj->record_id
-            && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id) {
-
-                if(cur_lock_obj->lock_mode == SHARED_LOCK) {
-                    trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
-                    s_lock_cnt++;
-                }
-                else if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-                    if(s_lock_cnt == 0) {
-                        trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
-                    }
-                    break;
-                }
-
-            }
+        if(cur_lock_obj->owner_trx_id == lock_obj->owner_trx_id
+        || cur_lock_obj->record_id != lock_obj->record_id) {
+            cur_lock_obj = cur_lock_obj->prev;
+            continue;
         }
 
-        // X lock <- S lock
+        if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+            trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
+            break;
+        }
         else {
-            if(cur_lock_obj->record_id == lock_obj->record_id
-            && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
-            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+            if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
                 trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
-                break;
             }
         }
 
@@ -196,7 +182,7 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
         return -1;
     }
 
-    if(is_conflict(lock_obj)) {
+    while(is_conflict(lock_obj)) {
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
     }
 
