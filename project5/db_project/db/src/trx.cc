@@ -92,21 +92,36 @@ void TrxManager::update_graph(lock_t* lock_obj) {
     pthread_mutex_lock(&lock_table_latch);
 
     // find preceding lock
+    int s_lock_cnt = 0;
     lock_t* cur_lock_obj = lock_obj->prev;
     while(cur_lock_obj != lock_obj->sentinel->head) {
-        if(cur_lock_obj->owner_trx_id == lock_obj->owner_trx_id
-        || cur_lock_obj->record_id != lock_obj->record_id) {
-            cur_lock_obj = cur_lock_obj->prev;
-            continue;
-        }
-
-        if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-            trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
-            break;
-        }
-        else {
-            if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+        // X <- S
+        if(lock_obj->lock_mode == SHARED_LOCK) {
+            if(cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
+            && cur_lock_obj->record_id == lock_obj->record_id
+            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
                 trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
+                pthread_mutex_unlock(&lock_table_latch);
+                break;
+            }
+        }
+        // X <- X or SSS... <- X
+        else {
+            if(cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
+            && cur_lock_obj->record_id == lock_obj->record_id) {
+                // X <- X
+                if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+                    if(s_lock_cnt == 0) {
+                        trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
+                    }
+                    pthread_mutex_unlock(&lock_table_latch);
+                    break;
+                }
+                // SSS... <- X
+                else {
+                    trx_adj[lock_obj->owner_trx_id].insert(cur_lock_obj->owner_trx_id);
+                    s_lock_cnt++;
+                }
             }
         }
 

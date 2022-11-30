@@ -26,20 +26,43 @@ void unlink_and_wake_threads(lock_t* lock_obj) {
     lock_t* tail = lock_obj->sentinel->tail;
     pagenum_t record_id = lock_obj->record_id;
     int owner_trx_id = lock_obj->owner_trx_id;
+    int lock_mode = lock_obj->lock_mode;
 
     lock_obj->prev->next = lock_obj->next;
     lock_obj->next->prev = lock_obj->prev;
 
     delete lock_obj;
 
+    int s_lock_cnt = 0;
     while(cur_lock_obj != tail) {
-        if(cur_lock_obj->record_id != record_id
-        || cur_lock_obj->owner_trx_id == owner_trx_id) {
-            cur_lock_obj = cur_lock_obj->next;
-            continue;
+        if(lock_mode == EXCLUSIVE_LOCK) {
+            // X -> SSS...
+            if(cur_lock_obj->record_id == record_id
+            && cur_lock_obj->lock_mode == SHARED_LOCK
+            && cur_lock_obj->owner_trx_id != owner_trx_id) {
+                pthread_cond_signal(&cur_lock_obj->cond);
+                s_lock_cnt++;
+            }
+
+            // X -> X
+            else if(cur_lock_obj->record_id == record_id
+            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
+            && cur_lock_obj->owner_trx_id != owner_trx_id) {
+                if(s_lock_cnt == 0)
+                    pthread_cond_signal(&cur_lock_obj->cond);
+                break;
+            }
         }
 
-        pthread_cond_signal(&cur_lock_obj->cond);
+        // S -> X
+        else {
+            if(cur_lock_obj->record_id == record_id
+            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
+            && cur_lock_obj->owner_trx_id != owner_trx_id) {
+                pthread_cond_signal(&cur_lock_obj->cond);
+                break;
+            }
+        }
 
         cur_lock_obj = cur_lock_obj->next;
     }
@@ -50,17 +73,17 @@ bool is_conflict(lock_t* lock_obj) {
     lock_t* cur_lock_obj = lock_obj->prev;
 
     while(cur_lock_obj != lock_obj->sentinel->head) {
-        if(lock_obj->lock_mode == EXCLUSIVE_LOCK
-        && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
-            if(cur_lock_obj->record_id == lock_obj->record_id) {
+        if(lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+            if(cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
+            && cur_lock_obj->record_id == lock_obj->record_id) {
                 pthread_mutex_unlock(&lock_table_latch);
                 return true;
             }
         }
-        else if(lock_obj->lock_mode == SHARED_LOCK
-        && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
-            if(cur_lock_obj->record_id == lock_obj->record_id
-            && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+        else {
+            if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK
+            && cur_lock_obj->owner_trx_id != lock_obj->owner_trx_id
+            && cur_lock_obj->record_id == lock_obj->record_id) {
                 pthread_mutex_unlock(&lock_table_latch);
                 return true;
             }
