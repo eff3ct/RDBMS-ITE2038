@@ -128,18 +128,13 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
     else {
         if(lock_table[combined_key]->tail->prev != lock_table[combined_key]->head) {
             // check already lock exists in lock table.
-            bool flag = false;
-            int s_lock_cnt = 0, x_lock_cnt = 0;
-
             if(lock_mode == SHARED_LOCK) {
                 lock_t* cur_lock_obj = lock_table[combined_key]->head->next;
                 while(cur_lock_obj != lock_table[combined_key]->tail) {
                     if(cur_lock_obj->owner_trx_id == trx_id
                     && cur_lock_obj->record_id == key) {
-                        flag = true;
-                        ret_obj = nullptr;
                         pthread_mutex_unlock(&lock_table_latch);
-                        return ret_obj;
+                        return nullptr;
                     }
                     cur_lock_obj = cur_lock_obj->next;
                 }
@@ -148,32 +143,13 @@ lock_t* lock_acquire(int64_t table_id, pagenum_t page_id, int64_t key, int trx_i
                 lock_t* cur_lock_obj = lock_table[combined_key]->head->next;
                 while(cur_lock_obj != lock_table[combined_key]->tail) {
                     if(cur_lock_obj->owner_trx_id == trx_id
-                    && cur_lock_obj->record_id == key) {
-                        if(cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
-                            flag = true;
-                            ret_obj = nullptr;
-                            pthread_mutex_unlock(&lock_table_latch);
-                            return ret_obj;
-                        }
-                        else if(cur_lock_obj->lock_mode == SHARED_LOCK) {
-                            flag = true;
-                            ret_obj = cur_lock_obj;
-                        }
-                    }
-                    else if(cur_lock_obj->owner_trx_id != trx_id
-                    && cur_lock_obj->record_id == key) {
-                        if(cur_lock_obj->lock_mode == SHARED_LOCK) s_lock_cnt++;
-                        else x_lock_cnt++;
+                    && cur_lock_obj->record_id == key
+                    && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+                        pthread_mutex_unlock(&lock_table_latch);
+                        return nullptr;
                     }
                     cur_lock_obj = cur_lock_obj->next;
                 }
-            }
-
-            // S -> X conversion
-            if(flag && (s_lock_cnt == 0 && x_lock_cnt == 0)) {
-                ret_obj->lock_mode = EXCLUSIVE_LOCK;
-                pthread_mutex_unlock(&lock_table_latch);
-                return nullptr;
             }
 
             // Project 4 implementation below.
