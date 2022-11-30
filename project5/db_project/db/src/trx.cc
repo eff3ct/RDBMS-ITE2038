@@ -62,8 +62,6 @@ void TrxManager::start_trx(int trx_id) {
     trx_table.insert({trx_id, nullptr});
 }
 void TrxManager::remove_trx(int trx_id) {
-    pthread_mutex_unlock(&trx_manager_latch);
-
     pthread_mutex_lock(&lock_table_latch);
     lock_t* cur_lock_obj = trx_table[trx_id];
 
@@ -79,7 +77,6 @@ void TrxManager::remove_trx(int trx_id) {
 
     pthread_mutex_unlock(&lock_table_latch);
 
-    pthread_mutex_lock(&trx_manager_latch);
 }
 void TrxManager::abort_trx(int trx_id) {
     undo_actions(trx_id);
@@ -179,15 +176,11 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
     trx_manager.add_action(trx_id, lock_obj);
     trx_manager.update_graph(lock_obj);
 
-    pthread_mutex_unlock(&trx_manager_latch);
     if(trx_manager.is_deadlock(trx_id)) {
-        pthread_mutex_lock(&trx_manager_latch);
         trx_manager.abort_trx(trx_id);
         pthread_mutex_unlock(&trx_manager_latch);
         return -1;
     }
-
-    pthread_mutex_lock(&trx_manager_latch);
 
     while(is_conflict(lock_obj)) {
         pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
