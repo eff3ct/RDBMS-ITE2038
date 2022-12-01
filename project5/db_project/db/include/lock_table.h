@@ -8,6 +8,8 @@
 #define SHARED_LOCK 0
 #define EXCLUSIVE_LOCK 1
 
+extern pthread_cond_t gcond;
+
 typedef struct lock_table_entry_t lock_table_entry_t;
 typedef struct lock_t lock_t;
 typedef uint64_t pagenum_t;
