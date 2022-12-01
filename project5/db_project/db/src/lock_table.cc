@@ -5,8 +5,6 @@
 typedef struct lock_t lock_t;
 typedef struct lock_table_entry_t lock_table_entry_t;
 
-pthread_cond_t gcond = PTHREAD_COND_INITIALIZER;
-
 std::unordered_map<int64_t, lock_table_entry_t*> lock_table;
 
 pthread_mutex_t lock_table_latch;
@@ -14,17 +12,16 @@ pthread_mutex_t lock_table_latch;
 void wake_all() {
     pthread_mutex_lock(&lock_table_latch);
 
-    // for(auto& entry : lock_table) {
-    //     auto& lock_table_entry = entry.second;
+    for(auto& entry : lock_table) {
+        auto& lock_table_entry = entry.second;
         
-    //     lock_t* cur_lock = lock_table_entry->head->next;
-    //     while(cur_lock != lock_table_entry->tail) {
-    //         pthread_cond_signal(&cur_lock->cond);
-    //         cur_lock = cur_lock->next;
-    //     }
-    // }
-    pthread_cond_broadcast(&gcond);
-
+        lock_t* cur_lock = lock_table_entry->head->next;
+        while(cur_lock != lock_table_entry->tail) {
+            pthread_cond_signal(&cur_lock->cond);
+            cur_lock = cur_lock->next;
+        }
+    }
+    
     pthread_mutex_unlock(&lock_table_latch);
 }
 void print_all_locks(lock_table_entry_t* entry) {
@@ -57,7 +54,7 @@ void unlink_and_wake_threads(lock_t* lock_obj) {
             continue;
         }
 
-        pthread_cond_broadcast(&gcond);
+        pthread_cond_signal(&cur_lock_obj->cond);
 
         cur_lock_obj = cur_lock_obj->next;
     }
