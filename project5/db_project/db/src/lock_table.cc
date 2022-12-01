@@ -57,7 +57,7 @@ void unlink_and_wake_threads(lock_t* lock_obj) {
             continue;
         }
 
-        pthread_cond_signal(&cur_lock_obj->cond);
+        pthread_cond_broadcast(&gcond);
 
         cur_lock_obj = cur_lock_obj->next;
     }
