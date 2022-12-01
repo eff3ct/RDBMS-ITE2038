@@ -9,6 +9,7 @@ int64_t global_trx_id;
 TrxManager trx_manager;
 
 void TrxManager::init() {
+    pthread_mutex_init(&trx_manager_latch, NULL);
     global_trx_id = 0;
     trx_table = {};
     trx_adj = {};
@@ -81,6 +82,7 @@ void TrxManager::remove_trx(int trx_id) {
 void TrxManager::abort_trx(int trx_id) {
     undo_actions(trx_id);
     remove_trx(trx_id);
+    wake_all();
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
     pthread_mutex_lock(&lock_table_latch);
