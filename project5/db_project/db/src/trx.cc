@@ -82,7 +82,7 @@ void TrxManager::remove_trx(int trx_id) {
 void TrxManager::abort_trx(int trx_id) {
     undo_actions(trx_id);
     remove_trx(trx_id);
-    wake_all();
+    // wake_all();
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
     pthread_mutex_lock(&lock_table_latch);
@@ -169,8 +169,6 @@ int trx_commit(int trx_id) {
 
 int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int trx_id, int lock_mode) {
     lock_t* lock_obj = lock_acquire(table_id, page_id, slot_num, trx_id, lock_mode);
-
-    std::cout << "trx_get_lock : " << trx_id << " " << lock_mode << std::endl;
 
     // transaction already has a lock on the record.
     if(lock_obj == nullptr) return 0;
