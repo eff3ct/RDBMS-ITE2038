@@ -336,3 +336,55 @@ TEST(MultiThreadTxnTest, SLockOnlyTest) {
 }
 
 #define WRR_N 500
+
+void* thread_deadlock_gen(void* argv) {
+    int64_t tid = trx_begin();
+
+    int64_t table_id = *((int*)argv);
+    char buf[150]; uint16_t val_size;
+    uint16_t* x = new uint16_t;
+    int flag = db_update(table_id, multi_rd_keys[0], (char*)multi_rd_values[0].c_str(), multi_rd_values[0].size(), x, tid);
+    if(flag < 0) {
+        std::cout << "deadlock occurred." << std::endl;        
+        return NULL;
+    }
+
+    int flag2 = db_update(table_id, multi_rd_keys[1], (char*)multi_rd_values[1].c_str(), multi_rd_values[1].size(), x, tid);
+    if(flag2 < 0) {
+        std::cout << "deadlock occurred." << std::endl; 
+        return NULL;
+    }
+
+    trx_commit(tid);
+
+    return NULL;
+}
+
+TEST(MultiThreadTxnTest, DeadLockTest) {
+    const char* path_dead = "multi_dead.db";
+
+    if(!std::remove(path_dead)) 
+        std::cout << "File " << path_dead << " has been removed." << std::endl;
+    int64_t table_id = open_table(path_dead);
+
+    init_db(64);
+    make_random_tree(table_id, 1000, multi_rd_values, multi_rd_keys);
+    std::cout << "Random tree has been created." << std::endl;
+    shutdown_db();
+
+    int64_t* tid = new int64_t;
+    *tid = open_table(path_dead);
+
+    init_db(64);
+    for(int i = 0; i < 2; ++i) {
+        pthread_create(&threads[i], 0, thread_deadlock_gen, tid);
+    }
+    
+    for(int i = 0; i < 2; ++i) {
+        pthread_join(threads[i], NULL);
+    }
+
+    delete tid;
+
+    shutdown_db();
+}
