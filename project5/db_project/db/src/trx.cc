@@ -35,14 +35,21 @@ bool TrxManager::dfs(int u, std::map<int, bool>& visited, std::map<int, bool>& d
     return false;
 }
 bool TrxManager::is_deadlock(int trx_id) {
+    pthread_mutex_lock(&trx_manager_latch);
     std::map<int, bool> visited;
     std::map<int, bool> dfs_stk;
 
-    if(trx_adj.find(trx_id) == trx_adj.end()) return false;
+    if(trx_adj.find(trx_id) == trx_adj.end()) {
+        pthread_mutex_unlock(&trx_manager_latch);
+        return false;
+    }
 
-    return dfs(trx_id, visited, dfs_stk);
+    bool ret = dfs(trx_id, visited, dfs_stk);
+    pthread_mutex_unlock(&trx_manager_latch);
+    return ret;
 }
 void TrxManager::undo_actions(int trx_id) {
+    pthread_mutex_lock(&trx_manager_latch);
     auto& log_stack = trx_log_table[trx_id];
 
     while(!log_stack.empty()) {
@@ -58,6 +65,7 @@ void TrxManager::undo_actions(int trx_id) {
     }
 
     trx_log_table.erase(trx_id);
+    pthread_mutex_unlock(&trx_manager_latch);
 }
 void TrxManager::start_trx(int trx_id) {
     trx_table.insert({trx_id, nullptr});
@@ -82,16 +90,20 @@ void TrxManager::remove_trx(int trx_id) {
 void TrxManager::abort_trx(int trx_id) {
     undo_actions(trx_id);
     remove_trx(trx_id);
-    // wake_all();
+    //wake_all();
 }
 void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
-    pthread_mutex_lock(&lock_table_latch);
+    pthread_mutex_lock(&trx_manager_latch);
     lock_obj->next_trx_lock_obj = trx_table[trx_id];
     trx_table[trx_id] = lock_obj;
-    pthread_mutex_unlock(&lock_table_latch);
+    pthread_mutex_unlock(&trx_manager_latch);
 }
 void TrxManager::update_graph(lock_t* lock_obj) {
     pthread_mutex_lock(&lock_table_latch);
+
+    if(trx_adj.find(lock_obj->owner_trx_id) == trx_adj.end()) {
+        trx_adj.insert({lock_obj->owner_trx_id, {}});
+    }
 
     // find preceding lock
     lock_t* cur_lock_obj = lock_obj->prev;
@@ -173,21 +185,15 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
     // transaction already has a lock on the record.
     if(lock_obj == nullptr) return 0;
     
-    pthread_mutex_lock(&trx_manager_latch);
-
     trx_manager.add_action(trx_id, lock_obj);
     trx_manager.update_graph(lock_obj);
 
     if(trx_manager.is_deadlock(trx_id)) {
         trx_manager.abort_trx(trx_id);
-        pthread_mutex_unlock(&trx_manager_latch);
         return -1;
     }
 
-    while(is_conflict(lock_obj)) {
-        pthread_cond_wait(&lock_obj->cond, &trx_manager_latch);
-    }
+    while(is_conflict(lock_obj)) {}
 
-    pthread_mutex_unlock(&trx_manager_latch);
     return 0;
 }

@@ -349,6 +349,8 @@ void* thread_deadlock_gen(void* argv) {
         return NULL;
     }
 
+    if(tid == 1) usleep(1000);
+
     int flag2 = db_update(table_id, multi_rd_keys[1], (char*)multi_rd_values[1].c_str(), multi_rd_values[1].size(), x, tid);
     if(flag2 < 0) {
         std::cout << "deadlock occurred." << std::endl; 

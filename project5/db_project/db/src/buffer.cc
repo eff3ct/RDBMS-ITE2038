@@ -64,11 +64,10 @@ buffer_t* BufferManager::find_buffer(int64_t table_id, pagenum_t pagenum) {
 buffer_t* BufferManager::find_victim() {
     buffer_t* cur_buf = buf_tail->prev;
 
-    return cur_buf;
-    // while(cur_buf != buf_head) {
-    //     if(pthread_mutex_trylock(&cur_buf->page_latch) == 0) return cur_buf;
-    //     cur_buf = cur_buf->prev;
-    // }
+    while(cur_buf != buf_head) {
+        if(pthread_mutex_trylock(&cur_buf->page_latch) == 0) return cur_buf;
+        cur_buf = cur_buf->prev;
+    }
 
     std::cerr << "ERROR : Eviction failed. No victim buffer found. (All pinned)" << std::endl;
     exit(EXIT_FAILURE);
@@ -162,7 +161,6 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
             buffer_t* victim = find_victim(); 
             if(victim->is_dirty) flush_buffer(victim);
 
-            pthread_mutex_lock(&victim->page_latch);
             int64_t key = convert_pair_to_key(victim->table_id, victim->pagenum);
             hash_pointer.erase(key);
 
