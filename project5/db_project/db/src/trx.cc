@@ -79,6 +79,7 @@ void TrxManager::abort_trx(int trx_id) {
     pthread_mutex_lock(&trx_manager_latch);
     undo_actions(trx_id);
     remove_trx(trx_id);
+    //print_adj();
     pthread_mutex_unlock(&trx_manager_latch);
     //wake_all();
 }
@@ -88,6 +89,9 @@ void TrxManager::add_action(int trx_id, lock_t* lock_obj) {
 }
 void TrxManager::update_graph(lock_t* lock_obj) {
     // find preceding lock
+    if(trx_adj.find(lock_obj->owner_trx_id) == trx_adj.end())
+        trx_adj.insert({lock_obj->owner_trx_id, {}});
+
     lock_t* cur_lock_obj = lock_obj->prev;
     while(cur_lock_obj != lock_obj->sentinel->head) {
         if(cur_lock_obj->owner_trx_id == lock_obj->owner_trx_id
@@ -171,6 +175,7 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
     trx_manager.update_graph(lock_obj);
 
     if(trx_manager.is_deadlock(trx_id)) {
+        //trx_manager.print_adj();
         pthread_mutex_unlock(&trx_manager_latch);
         return -1;
     }
