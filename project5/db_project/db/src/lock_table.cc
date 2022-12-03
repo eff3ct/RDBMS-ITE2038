@@ -36,6 +36,8 @@ void print_all_locks(lock_table_entry_t* entry) {
 }
 
 void unlink_and_wake_threads(lock_t* lock_obj) {
+    pthread_mutex_lock(&lock_table_latch);
+
     lock_t* cur_lock_obj = lock_obj->sentinel->head->next;
     if(cur_lock_obj == lock_obj) cur_lock_obj = cur_lock_obj->next;
     lock_t* tail = lock_obj->sentinel->tail;
@@ -58,15 +60,19 @@ void unlink_and_wake_threads(lock_t* lock_obj) {
 
         cur_lock_obj = cur_lock_obj->next;
     }
+
+    pthread_mutex_unlock(&lock_table_latch);
 }
  
 bool is_conflict(lock_t* lock_obj) {
+    pthread_mutex_lock(&lock_table_latch);
     lock_t* cur_lock_obj = lock_obj->prev;
 
     while(cur_lock_obj != lock_obj->sentinel->head) {
         if(lock_obj->lock_mode == EXCLUSIVE_LOCK
         && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
             if(cur_lock_obj->record_id == lock_obj->record_id) {
+                pthread_mutex_unlock(&lock_table_latch);
                 return true;
             }
         }
@@ -74,19 +80,21 @@ bool is_conflict(lock_t* lock_obj) {
         && lock_obj->owner_trx_id != cur_lock_obj->owner_trx_id) {
             if(cur_lock_obj->record_id == lock_obj->record_id
             && cur_lock_obj->lock_mode == EXCLUSIVE_LOCK) {
+                pthread_mutex_unlock(&lock_table_latch);
                 return true;
             }
         }
 
         cur_lock_obj = cur_lock_obj->prev;
     }
+    pthread_mutex_unlock(&lock_table_latch);
 
     return false;
 }
 
 int init_lock_table() {
     lock_table = {};
-    lock_table_latch = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_init(&lock_table_latch, NULL);
     return 0;
 }
 

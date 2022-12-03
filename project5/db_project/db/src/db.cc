@@ -147,7 +147,10 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t* val_size, in
     slotnum_t record_id = location_pair.second;
 
     int flag = trx_get_lock(table_id, leaf_page_num, record_id, trx_id, SHARED_LOCK);
-    if(flag < 0) return -1;
+    if(flag < 0) {
+        trx_manager.abort_trx(trx_id);
+        return -1;
+    }
 
     buffer_t* page = buffer_manager.buffer_read_page(table_id, leaf_page_num);
 
@@ -169,7 +172,10 @@ int db_update(int64_t table_id, int64_t key, char* value, uint16_t new_val_size,
     slotnum_t record_id = location_pair.second;
 
     int flag = trx_get_lock(table_id, page, record_id, trx_id, EXCLUSIVE_LOCK);
-    if(flag < 0) return -1;
+    if(flag < 0) {
+        trx_manager.abort_trx(trx_id);
+        return -1;
+    }
 
     trx_manager.add_log_to_trx(table_id, page, record_id, trx_id);
 
