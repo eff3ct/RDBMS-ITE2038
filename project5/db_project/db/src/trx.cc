@@ -22,18 +22,6 @@ void TrxManager::remove_trx_node(int trx_id) {
         adj.erase(trx_id);
     }
 }
-bool TrxManager::dfs(int u, std::map<int, bool>& visited, std::map<int, bool>& dfs_stk) {
-    visited[u] = true;
-    dfs_stk[u] = true;
-
-    for(const int& v : trx_adj[u]) {
-        if(!visited[v] && dfs(v, visited, dfs_stk)) return true;
-        else if(dfs_stk[v]) return true;
-    }
-
-    dfs_stk[u] = false;
-    return false;
-}
 bool TrxManager::is_deadlock(int trx_id) {
     std::set<int> visited;
     visited.insert(trx_id);
@@ -94,7 +82,6 @@ void TrxManager::remove_trx(int trx_id) {
     trx_table.erase(trx_id);
 }
 void TrxManager::abort_trx(int trx_id) {
-    pthread_mutex_lock(&trx_manager_latch);
     undo_actions(trx_id);
     remove_trx(trx_id);
     //print_adj();
@@ -194,7 +181,6 @@ int trx_get_lock(int64_t table_id, pagenum_t page_id, slotnum_t slot_num, int tr
 
     if(trx_manager.is_deadlock(trx_id)) {
         //trx_manager.print_adj();
-        pthread_mutex_unlock(&trx_manager_latch);
         return -1;
     }
 

@@ -43,7 +43,6 @@ class TrxManager {
 
         void remove_trx_node(int trx_id);
         void undo_actions(int trx_id);
-        bool dfs(int u, std::map<int, bool>& visited, std::map<int, bool>& dfs_stk);
         
     public:
         // initialize transaction manager
