@@ -35,12 +35,30 @@ bool TrxManager::dfs(int u, std::map<int, bool>& visited, std::map<int, bool>& d
     return false;
 }
 bool TrxManager::is_deadlock(int trx_id) {
-    std::map<int, bool> visited;
-    std::map<int, bool> dfs_stk;
+    std::set<int> visited;
+    visited.insert(trx_id);
 
-    if(trx_adj.find(trx_id) == trx_adj.end()) return false;
+    std::stack<std::pair<int, int>> dfs_stk;
+    dfs_stk.push({ trx_id, trx_id });
+    while(!dfs_stk.empty()) {
+        int prev = dfs_stk.top().first;
+        int curr = dfs_stk.top().second;
 
-    return dfs(trx_id, visited, dfs_stk);
+        dfs_stk.pop();
+
+        if(prev != curr) {
+            if(trx_id == curr) return true;
+            if(visited.find(curr) != visited.end()) continue;
+        } 
+
+        visited.insert(curr);
+
+        for(const int& next : trx_adj[curr]) {
+            dfs_stk.push({ curr, next });
+        }
+    }
+
+    return false;
 }
 void TrxManager::undo_actions(int trx_id) {
     auto& log_stack = trx_log_table[trx_id];
