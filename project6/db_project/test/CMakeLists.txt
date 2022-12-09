@@ -1,0 +1,31 @@
+# GoogleTest
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/e4717df71a4f45bf9f0ac88c6cd9846a0bc248dd.zip)
+
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+set_tests_properties(${Tests} PROPERTIES TIMEOUT 10000)
+
+set(DB_TESTS
+  # file_test.cc
+  # on-disk-bpt-test.cc
+  # insertion_test.cc
+  # deletion_test.cc
+  # txn_test__.cc
+  txn_test.cc
+  )
+
+add_executable(db_test ${DB_TESTS})
+
+target_link_libraries(
+  db_test
+  db
+  gtest_main
+  )
+
+include(GoogleTest)
+gtest_discover_tests(db_test)
+
