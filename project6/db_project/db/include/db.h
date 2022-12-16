@@ -6,6 +6,7 @@
 #include "on-disk-bpt.h"
 #include "trx.h"
 #include "lock_table.h"
+#include "log.h"
 
 #include <stdint.h>
 
@@ -57,6 +58,11 @@ int db_update(int64_t table_id, int64_t key, char* value, uint16_t new_val_size,
  * If success, return 0 else return non-zero value.
  */
 int init_db(int num_buf);
+
+/** Initialize DBMS Project 6
+ * If success, return 0 else return non-zero value.
+ */
+int init_db(int buf_num, int flag, int log_num, char* log_path, char* logmsg_path);
 
 /** Shutdown DBMS.
  * If success, return 0 else return non-zero value.

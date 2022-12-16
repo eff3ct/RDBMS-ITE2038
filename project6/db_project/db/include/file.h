@@ -27,7 +27,9 @@ class TableManager {
     public:
         TableManager() : next_table_id(0) {}
         int64_t get_table_id(int fd);
+        int64_t get_table_id(std::string pathname);
         int get_fd(int64_t table_id);
+        void insert_table(int fd, std::string pathname);
         void insert_table(int fd);
         void close_all();
 };

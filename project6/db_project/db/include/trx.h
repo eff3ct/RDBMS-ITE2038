@@ -15,6 +15,7 @@
 #include <map>
 
 #include "lock_table.h"
+#include "log.h"
 #include "buffer.h"
 
 #define SHARED_LOCK 0
@@ -45,6 +46,7 @@ class TrxManager {
         void undo_actions(int trx_id);
         
     public:
+        std::unordered_map<int, uint64_t> trx_last_LSN;
         // initialize transaction manager
         void init();
         // print adj

@@ -53,8 +53,20 @@ void file_io::make_free_pages(int fd, pagenum_t start_pagenum, pagenum_t new_pag
 int64_t TableManager::get_table_id(int fd) {
     return fd_to_table_id[fd];
 }
+/* Implemented For Project 6 */   
+int64_t TableManager::get_table_id(std::string pathname) {
+    int64_t table_id = std::stoi(pathname.substr(4));
+    return table_id;
+}
 int TableManager::get_fd(int64_t table_id) {
     return table_id_to_fd[table_id];
+}
+/* Implemented For Project 6 */   
+void TableManager::insert_table(int fd, std::string pathname) {
+    int64_t table_id = std::stoi(pathname.substr(4));
+    fd_to_table_id.insert({fd, table_id});
+    table_id_to_fd.insert({table_id, fd});
+    opened_files.push_back(fd);
 }
 void TableManager::insert_table(int fd) {
     fd_to_table_id.insert({fd, next_table_id});
@@ -91,8 +103,8 @@ int64_t file_open_table_file(const char* pathname) {
 
     if(!file_io::is_valid_magic_number(fd)) return -1;
 
-    table_manager.insert_table(fd);
-    int64_t table_id = table_manager.get_table_id(fd);
+    table_manager.insert_table(fd, std::string(pathname));
+    int64_t table_id = table_manager.get_table_id(std::string(pathname));
 
     return table_id;
 }

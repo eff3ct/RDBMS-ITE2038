@@ -189,3 +189,13 @@ int db_update(int64_t table_id, int64_t key, char* value, uint16_t new_val_size,
 
     return 0;
 }
+
+/* Project 6 APIs */
+int init_db(int buf_num, int flag, int log_num, char* log_path, char* logmsg_path) {
+    init_lock_table();
+    buffer_manager.init_buf(buf_num);
+    trx_manager.init();
+    log_buf_manager.init(log_num, log_path, logmsg_path);
+    log_buf_manager.recovery();
+    return 0;
+}

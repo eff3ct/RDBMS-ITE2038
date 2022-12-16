@@ -11,10 +11,14 @@
 #define DEFAULT_UPDATE_LOG_SIZE 48
 #define DEFAULT_COMPENSATE_LOG_SIZE 56
 
+#include "buffer.h"
+#include "trx.h"
+
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <pthread.h>
 
 #include <unistd.h>
@@ -24,8 +28,9 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <set>
 
-using slotnum_t = uint16_t;
+using slotnum_t = int16_t;
 
 // Log Buffer Manager Latch
 extern pthread_mutex_t log_buffer_manager_latch;
@@ -46,18 +51,21 @@ class log_t {
 class begin_log_t : public log_t {
     public:
         begin_log_t();
+        begin_log_t(int trx_id);
 
         void write_log(int fd) override;
 };
 class commit_log_t : public log_t {
     public:
         commit_log_t();
+        commit_log_t(int trx_id);
 
         void write_log(int fd) override;
 };
 class rollback_log_t : public log_t {
     public:
         rollback_log_t();
+        rollback_log_t(int trx_id);
 
         void write_log(int fd) override;
 };
@@ -73,8 +81,11 @@ class update_log_t : public log_t {
         std::string new_image;
 
         update_log_t();
+        update_log_t(int trx_id, uint64_t LSN, uint64_t prev_LSN, uint64_t table_id, uint64_t page_id, slotnum_t offset, uint16_t data_length, std::string old_image, std::string new_image);
 
         void write_log(int fd) override;
+        void add_old_image(std::string old_img);
+        void add_new_image(std::string new_img);
 };
 class compensate_log_t : public log_t {
     public:
@@ -87,8 +98,11 @@ class compensate_log_t : public log_t {
         uint64_t next_undo_LSN;
         
         compensate_log_t();
+        compensate_log_t(int trx_id, uint64_t LSN, uint64_t prev_LSN, uint64_t table_id, uint64_t page_id, slotnum_t offset, uint16_t data_length, std::string old_image, std::string new_image, uint64_t next_undo_LSN);
 
         void write_log(int fd) override;
+        void add_old_image(std::string old_img);
+        void add_new_image(std::string new_img);
 };
 
 // Log Buffer Manager
@@ -96,14 +110,27 @@ class LogBufferManager {
     private:
         std::vector<log_t*> log_buf;
         int max_size;
-        int log_fd;
-        // int log_msg_fd;
+        char* log_path;
+        char* logmsg_path;
+        int log_file_fd;
+        FILE* logmsg_file;
+
+        std::set<int> win_trx;
+        std::set<int> lose_trx;
+
+        int analyze_log();
+        void redo_pass();
+        void undo_pass();
 
     public:
+        uint64_t next_LSN;
+        uint64_t flushed_LSN;
+
         LogBufferManager();
-        void init_buf(int buf_size);
+        void init(int buf_size, char* log_path, char* logmsg_path);
         void add_log(log_t* log);
         void flush_logs();
+        void recovery();
 };
 
 extern LogBufferManager log_buf_manager;

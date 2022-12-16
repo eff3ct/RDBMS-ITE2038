@@ -54,6 +54,8 @@ void TrxManager::undo_actions(int trx_id) {
     while(!log_stack.empty()) {
         auto& log = log_stack.top();
 
+        /* update log on here */
+
         buffer_t* page = buffer_manager.buffer_read_page(log.table_id, log.page_id);
         buffer_manager.buffer_write_page(log.table_id, log.page_id);
         slotnum_t offset = page_io::leaf::get_offset((page_t*)page->frame, log.slot_num);
@@ -84,6 +86,10 @@ void TrxManager::remove_trx(int trx_id) {
 void TrxManager::abort_trx(int trx_id) {
     undo_actions(trx_id);
     remove_trx(trx_id);
+
+    rollback_log_t* log = new rollback_log_t(trx_id);
+    log_buf_manager.add_log(log);
+
     //print_adj();
     pthread_mutex_unlock(&trx_manager_latch);
     //wake_all();
@@ -154,6 +160,9 @@ int trx_begin() {
     int trx_id = ++global_trx_id;
     trx_manager.start_trx(trx_id);
 
+    begin_log_t* log = new begin_log_t(trx_id);
+    log_buf_manager.add_log(log);
+
     pthread_mutex_unlock(&trx_manager_latch);
     return trx_id;
 }
@@ -162,6 +171,9 @@ int trx_commit(int trx_id) {
     pthread_mutex_lock(&trx_manager_latch);
 
     trx_manager.remove_trx(trx_id);
+
+    commit_log_t* log = new commit_log_t(trx_id);
+    log_buf_manager.add_log(log);
 
     pthread_mutex_unlock(&trx_manager_latch);
 

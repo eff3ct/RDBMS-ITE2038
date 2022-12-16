@@ -1,6 +1,16 @@
 #include "page.h"
 
 /* PAGE IO */
+// Set LSN
+void page_io::set_page_LSN(page_t* page, uint64_t LSN) {
+    memcpy(page->data + 24, &LSN, sizeof(uint64_t));
+}
+// Get LSN
+uint64_t page_io::get_page_LSN(const page_t* page) {
+    uint64_t LSN;
+    memcpy(&LSN, page->data + 24, sizeof(uint64_t));
+    return LSN;
+}
 // Get next free page number from page(pagenum)
 pagenum_t page_io::get_next_free_page(const page_t* page, pagenum_t pagenum) {
     pagenum_t next_free_page;
