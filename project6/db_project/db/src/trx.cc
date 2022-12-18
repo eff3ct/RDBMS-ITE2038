@@ -4,6 +4,7 @@
 
 pthread_mutex_t trx_manager_latch = PTHREAD_MUTEX_INITIALIZER;
 extern pthread_mutex_t lock_table_latch;
+extern LogBufferManager log_buf_manager;
 
 int64_t global_trx_id;
 TrxManager trx_manager;
@@ -54,11 +55,18 @@ void TrxManager::undo_actions(int trx_id) {
     while(!log_stack.empty()) {
         auto& log = log_stack.top();
 
-        /* update log on here */
-
         buffer_t* page = buffer_manager.buffer_read_page(log.table_id, log.page_id);
         buffer_manager.buffer_write_page(log.table_id, log.page_id);
         slotnum_t offset = page_io::leaf::get_offset((page_t*)page->frame, log.slot_num);
+
+        char* buf = new char[log.old_val_size];
+        page_io::leaf::get_record((page_t*)page->frame, offset, buf, log.old_val_size);
+        std::string cur_value = std::string(buf, log.old_val_size);
+        delete[] buf;
+
+        update_log_t* real_log = new update_log_t(trx_id, log.table_id, log.page_id, offset, log.old_val_size, cur_value, log.old_value);
+        log_buf_manager.add_log(real_log);
+        
         page_io::leaf::set_record((page_t*)page->frame, offset, log.old_value.c_str(), log.old_val_size);
         buffer_manager.unpin_buffer(log.table_id, log.page_id);
 

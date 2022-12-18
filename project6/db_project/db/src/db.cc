@@ -3,6 +3,7 @@
 #define MAX_TABLES 20
 
 extern BufferManager buffer_manager;
+extern LogBufferManager log_buf_manager;
 
 /** Open existing data file using ‘pathname’ or create one if not existed. 
  * If success, return a unique table id else return negative value.
@@ -11,7 +12,10 @@ std::set<std::string> opened_file_paths;
 
 int64_t open_table(const char* pathname) {
     std::string path(pathname);
-    if(opened_file_paths.find(path) != opened_file_paths.end()) return -1;
+    if(opened_file_paths.find(path) != opened_file_paths.end()) {
+        // already opened.
+        return std::stoi(std::string(pathname).substr(4));
+    }
     if(opened_file_paths.size() >= MAX_TABLES) return -1;
     opened_file_paths.insert(path);
 
@@ -121,11 +125,12 @@ int init_db(int num_buf) {
 int shutdown_db() {
     buffer_manager.destroy_all();
     buffer_manager.buffer_close_table_file();
+    log_buf_manager.end_log();
     opened_file_paths.clear();
     return 0;
 }
 
-/* Project 5 APIs */
+/* Project 5 + 6 APIs */
 
 /** Find a record containing the 'key'.
  * If a matching key exists, store its value in 'ret_val' and the corresponding size in 'val_size'.
@@ -171,6 +176,10 @@ int db_update(int64_t table_id, int64_t key, char* value, uint16_t new_val_size,
     pagenum_t page = location_pair.first;
     slotnum_t record_id = location_pair.second;
 
+    if(location_pair == std::pair<pagenum_t, slotnum_t>({0, 0})) {
+        return -1;
+    }
+
     int flag = trx_get_lock(table_id, page, record_id, trx_id, EXCLUSIVE_LOCK);
     if(flag < 0) {
         trx_manager.abort_trx(trx_id);
@@ -184,6 +193,15 @@ int db_update(int64_t table_id, int64_t key, char* value, uint16_t new_val_size,
     slotnum_t offset = page_io::leaf::get_offset((page_t*)cur_page->frame, record_id);
 
     buffer_manager.buffer_write_page(table_id, page);
+
+    char* buf = new char[*old_val_size];
+    page_io::leaf::get_record((page_t*)cur_page->frame, offset, buf, *old_val_size);
+    std::string old_val = std::string(buf, *old_val_size);
+    update_log_t* log = new update_log_t(trx_id, table_id, page, offset, *old_val_size, old_val, std::string(value, new_val_size));
+    log_buf_manager.add_log(log);
+    delete[] buf;
+
+    page_io::set_page_LSN((page_t*)cur_page->frame, log->LSN);
     page_io::leaf::set_record((page_t*)cur_page->frame, offset, value, new_val_size);
     buffer_manager.unpin_buffer(table_id, page);
 
@@ -195,7 +213,7 @@ int init_db(int buf_num, int flag, int log_num, char* log_path, char* logmsg_pat
     init_lock_table();
     buffer_manager.init_buf(buf_num);
     trx_manager.init();
-    log_buf_manager.init(log_num, log_path, logmsg_path);
+    log_buf_manager.init(buf_num, log_path, logmsg_path);
     log_buf_manager.recovery();
     return 0;
 }

@@ -49,11 +49,11 @@ void make_random_tree(int64_t tid, int tree_sz, std::vector<std::string>& values
 }
 
 TEST(SingleThreadTxnTest, SLockOnlyTest) {
-    const char* pathname = "single_thread_txn_test_s.db";
+    const char* pathname = "DATA1";
     if(!std::remove(pathname))
         std::cout << "Remove existing file " << pathname << std::endl;
 
-    init_db(64);
+    init_db(64, 0, 0, "log", "logmsg.txt");
     int64_t table_id = open_table(pathname);
 
     std::vector<std::string> values;
@@ -99,11 +99,11 @@ TEST(SingleThreadTxnTest, SLockOnlyTest) {
 }
 
 TEST(SingleThreadTxnTest, XLockOnlyTest) {
-    const char* pathname = "single_thread_txn_test_x.db";
+    const char* pathname = "DATA2";
     if(!std::remove(pathname))
         std::cout << "Remove existing file " << pathname << std::endl;
 
-    init_db(64);
+    init_db(64, 0, 0, "log2", "logmsg.txt");
     int64_t table_id = open_table(pathname);
 
     std::vector<std::string> values;
@@ -163,11 +163,11 @@ TEST(SingleThreadTxnTest, XLockOnlyTest) {
 }
 
 TEST(SingleThreadTxnTest, SXLockTest) {
-    const char* pathname = "single_thread_txn_test_sx.db";
+    const char* pathname = "DATA3";
     if(!std::remove(pathname))
         std::cout << "Remove existing file " << pathname << std::endl;
 
-    init_db(64);
+    init_db(64, 0, 0, "log3", "logmsg.txt");
     int64_t table_id = open_table(pathname);
 
     std::vector<std::string> values;
@@ -307,13 +307,13 @@ void* thread_rnd_read(void* arg) {
 }
 
 TEST(MultiThreadTxnTest, SLockOnlyTest) {
-    const char* path_multi_thread_rd = "multi_thread_rd.db";
+    const char* path_multi_thread_rd = "DATA4";
 
     if(!std::remove(path_multi_thread_rd)) 
         std::cout << "File " << path_multi_thread_rd << " has been removed." << std::endl;
     int64_t table_id = open_table(path_multi_thread_rd);
 
-    init_db(64);
+    init_db(64, 0, 0, "log4", "logmsg.txt");
     make_random_tree(table_id, 1000, multi_rd_values, multi_rd_keys);
     std::cout << "Random tree has been created." << std::endl;
     shutdown_db();
@@ -321,7 +321,7 @@ TEST(MultiThreadTxnTest, SLockOnlyTest) {
     int64_t* tid = new int64_t;
     *tid = open_table(path_multi_thread_rd);
 
-    init_db(64);
+    init_db(64, 0, 0, "log4", "logmsg.txt");
     for(int i = 0; i < THREAD_N; ++i) {
         pthread_create(&threads[i], 0, thread_rnd_read, tid);
     }

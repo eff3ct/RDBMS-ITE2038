@@ -46,7 +46,6 @@ class TrxManager {
         void undo_actions(int trx_id);
         
     public:
-        std::unordered_map<int, uint64_t> trx_last_LSN;
         // initialize transaction manager
         void init();
         // print adj

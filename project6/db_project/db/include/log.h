@@ -11,6 +11,7 @@
 #define DEFAULT_UPDATE_LOG_SIZE 48
 #define DEFAULT_COMPENSATE_LOG_SIZE 56
 
+#include "db.h"
 #include "buffer.h"
 #include "trx.h"
 
@@ -81,7 +82,7 @@ class update_log_t : public log_t {
         std::string new_image;
 
         update_log_t();
-        update_log_t(int trx_id, uint64_t LSN, uint64_t prev_LSN, uint64_t table_id, uint64_t page_id, slotnum_t offset, uint16_t data_length, std::string old_image, std::string new_image);
+        update_log_t(int trx_id, uint64_t table_id, uint64_t page_id, slotnum_t offset, uint16_t data_length, std::string old_image, std::string new_image);
 
         void write_log(int fd) override;
         void add_old_image(std::string old_img);
@@ -98,7 +99,7 @@ class compensate_log_t : public log_t {
         uint64_t next_undo_LSN;
         
         compensate_log_t();
-        compensate_log_t(int trx_id, uint64_t LSN, uint64_t prev_LSN, uint64_t table_id, uint64_t page_id, slotnum_t offset, uint16_t data_length, std::string old_image, std::string new_image, uint64_t next_undo_LSN);
+        compensate_log_t(int trx_id, uint64_t table_id, uint64_t page_id, slotnum_t offset, uint16_t data_length, std::string old_image, std::string new_image, uint64_t next_undo_LSN);
 
         void write_log(int fd) override;
         void add_old_image(std::string old_img);
@@ -118,21 +119,29 @@ class LogBufferManager {
         std::set<int> win_trx;
         std::set<int> lose_trx;
 
+        begin_log_t make_begin_log(char* buf);
+        commit_log_t make_commit_log(char* buf);
+        rollback_log_t make_rollback_log(char* buf);
+        update_log_t make_update_log(char* buf);
+        compensate_log_t make_compensate_log(char* buf);
+
         int analyze_log();
         void redo_pass();
         void undo_pass();
 
     public:
         uint64_t next_LSN;
-        uint64_t flushed_LSN;
 
         LogBufferManager();
         void init(int buf_size, char* log_path, char* logmsg_path);
         void add_log(log_t* log);
+        void add_log_no_latch(log_t* log);
         void flush_logs();
         void recovery();
+        void end_log();
 };
 
 extern LogBufferManager log_buf_manager;
+extern std::unordered_map<int, uint64_t> trx_last_LSN;
 
 #endif

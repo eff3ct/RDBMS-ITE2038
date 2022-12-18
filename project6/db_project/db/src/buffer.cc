@@ -150,7 +150,7 @@ void BufferManager::buffer_close_table_file() {
 
 buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
     pthread_mutex_lock(&buffer_manager_latch);
-
+    
     total_cnt++;
 
     /* cache miss */
@@ -200,7 +200,7 @@ buffer_t* BufferManager::buffer_read_page(int64_t table_id, pagenum_t pagenum) {
         cache_hit++;
         buffer_t* cur_buf = find_buffer(table_id, pagenum);
         pthread_mutex_lock(&cur_buf->page_latch);
-        
+
         // move to front
         move_to_head(cur_buf);
 
@@ -237,9 +237,7 @@ void BufferManager::buffer_free_page(int64_t table_id, pagenum_t pagenum) {
     }
 
     buffer_t* header_buf = find_buffer(table_id, 0);
-
     pthread_mutex_lock(&header_buf->page_latch);
-    buffer_write_page(table_id, 0);
 
     page_t free_page;
     pagenum_t next_free_page_num = page_io::get_next_free_page((page_t*)header_buf->frame, 0);
@@ -264,7 +262,6 @@ pagenum_t BufferManager::buffer_alloc_page(int64_t table_id) {
     buffer_t* header_buf = find_buffer(table_id, 0);
 
     pthread_mutex_lock(&header_buf->page_latch);
-    buffer_write_page(table_id, 0);
 
     pagenum_t next_free_page_num = page_io::get_next_free_page((page_t*)header_buf->frame, 0);
     if(next_free_page_num == 0) {

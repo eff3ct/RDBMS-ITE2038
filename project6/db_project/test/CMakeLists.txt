@@ -15,6 +15,7 @@ set(DB_TESTS
   # insertion_test.cc
   # deletion_test.cc
   # txn_test__.cc
+  # recovery_test__.cc
   txn_test.cc
   )
 
