@@ -126,8 +126,8 @@ class LogBufferManager {
         compensate_log_t make_compensate_log(char* buf);
 
         int analyze_log();
-        void redo_pass();
-        void undo_pass();
+        int redo_pass(int flag, int log_num);
+        int undo_pass(int flag, int log_num);
 
     public:
         uint64_t next_LSN;
@@ -137,7 +137,7 @@ class LogBufferManager {
         void add_log(log_t* log);
         void add_log_no_latch(log_t* log);
         void flush_logs();
-        void recovery();
+        void recovery(int flag, int log_num);
         void end_log();
 };
 

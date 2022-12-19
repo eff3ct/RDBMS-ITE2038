@@ -373,7 +373,9 @@ int LogBufferManager::analyze_log() {
     return (trx_set.empty()) ? 0 : 1;
 }
 /* this implementation is currently no consider-redo version. */
-void LogBufferManager::redo_pass() {
+int LogBufferManager::redo_pass(int flag, int log_num) {
+    int cur_log_cnt = 0;    
+
     std::set<int> table_set;
 
     fprintf(logmsg_file, "[REDO] Redo pass start\n");
@@ -383,6 +385,8 @@ void LogBufferManager::redo_pass() {
     lseek(log_file_fd, 0, SEEK_SET);
 
     while(cur_offset != end_offset) {
+        if(flag == 1 && cur_log_cnt >= log_num) return 1;
+
         uint32_t log_size;
         uint32_t log_type;
         pread(log_file_fd, &log_size, sizeof(log_size), cur_offset);
@@ -392,6 +396,7 @@ void LogBufferManager::redo_pass() {
         pread(log_file_fd, tmp_buf, log_size, cur_offset);
 
         if(log_type == BEGIN_LOG || log_type == COMMIT_LOG || log_type == ROLLBACK_LOG) {
+            cur_log_cnt++;
             if(log_type == BEGIN_LOG) {
                 begin_log_t begin_log = make_begin_log(tmp_buf);
                 fprintf(logmsg_file, "LSN %lu [BEGIN] Transaction id %d\n", begin_log.LSN, begin_log.trx_id);
@@ -410,6 +415,7 @@ void LogBufferManager::redo_pass() {
         }
 
         if(log_type == UPDATE_LOG) {
+            cur_log_cnt++;
             update_log_t update_log = make_update_log(tmp_buf);
 
             if(table_set.find(update_log.table_id) == table_set.end()) {
@@ -439,6 +445,7 @@ void LogBufferManager::redo_pass() {
             fprintf(logmsg_file, "LSN %lu [UPDATE] Transaction id %d redo apply\n", update_log.LSN, update_log.trx_id);
         }
         else if(log_type == COMPENSATE_LOG) {
+            cur_log_cnt++;
             compensate_log_t compensate_log = make_compensate_log(tmp_buf);
             buffer_t* buf = buffer_manager.buffer_read_page(compensate_log.table_id, compensate_log.page_id);
 
@@ -466,8 +473,10 @@ void LogBufferManager::redo_pass() {
 
     fprintf(logmsg_file, "[REDO] Redo pass end\n");
 
+    return 0;
 }
-void LogBufferManager::undo_pass() {
+int LogBufferManager::undo_pass(int flag, int log_num) {
+    int cur_log_cnt = 0;
     fprintf(logmsg_file, "[UNDO] Undo pass start\n");
     
     while(true) {
@@ -488,6 +497,8 @@ void LogBufferManager::undo_pass() {
         pread(log_file_fd, tmp_buf, log_size, cur_LSN);
 
         if(log_type == UPDATE_LOG) {
+            cur_log_cnt++;
+
             update_log_t update_log = make_update_log(tmp_buf);
             buffer_t* buf = buffer_manager.buffer_read_page(update_log.table_id, update_log.page_id);
 
@@ -518,6 +529,8 @@ void LogBufferManager::undo_pass() {
             trx_last_LSN[update_log.trx_id] = update_log.prev_LSN;
         }
         else if(log_type == BEGIN_LOG) {
+            cur_log_cnt++;
+
             begin_log_t begin_log = make_begin_log(tmp_buf);
             fprintf(logmsg_file, "LSN %lu [BEGIN] Transaction id %d\n", begin_log.LSN, begin_log.trx_id);
 
@@ -528,6 +541,8 @@ void LogBufferManager::undo_pass() {
             lose_trx.erase(begin_log.trx_id);
         }
         else if(log_type == COMPENSATE_LOG) {
+            cur_log_cnt++;
+
             compensate_log_t compensate_log = make_compensate_log(tmp_buf);
             fprintf(logmsg_file, "LSN %lu [CLR] Transaction id %d\n", compensate_log.LSN, compensate_log.trx_id);
             if(compensate_log.next_undo_LSN == 0) {
@@ -538,24 +553,32 @@ void LogBufferManager::undo_pass() {
                 trx_last_LSN[compensate_log.trx_id] = compensate_log.next_undo_LSN;
         }
         else if(log_type == COMMIT_LOG) {
+            cur_log_cnt++;
+
             commit_log_t commit_log = make_commit_log(tmp_buf);
             fprintf(logmsg_file, "LSN %lu [COMMIT] Transaction id %d\n", commit_log.LSN, commit_log.trx_id);
         }
         else if(log_type == ROLLBACK_LOG) {
+            cur_log_cnt++;
+
             rollback_log_t rollback_log = make_rollback_log(tmp_buf);
             fprintf(logmsg_file, "LSN %lu [ROLLBACK] Transaction id %d\n", rollback_log.LSN, rollback_log.trx_id);
         }
 
         delete[] tmp_buf;
+
+        if(flag == 2 && cur_log_cnt >= log_num) return 1;
     }
 
     fprintf(logmsg_file, "[UNDO] Undo pass end\n");
+
+    return 0;
 }
-void LogBufferManager::recovery() {
+void LogBufferManager::recovery(int flag, int log_num) {
     pthread_mutex_lock(&log_buffer_manager_latch);
 
-    int flag = analyze_log();
-    if(flag == 0) {
+    int flag_ = analyze_log();
+    if(flag_ == 0) {
         // If no loser trx, truncate log file.
         ftruncate(log_file_fd, 0);
         next_LSN = 0;
@@ -563,8 +586,17 @@ void LogBufferManager::recovery() {
         return;
     }
 
-    redo_pass();
-    undo_pass();
+    int redo_flag = redo_pass(flag, log_num);
+    if(redo_flag == 1) {
+        pthread_mutex_unlock(&log_buffer_manager_latch);
+        return;
+    }
+
+    int undo_flag = undo_pass(flag, log_num);
+    if(undo_flag == 1) {
+        pthread_mutex_unlock(&log_buffer_manager_latch);
+        return;
+    }
     
     // force flush
     flush_logs();

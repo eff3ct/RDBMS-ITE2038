@@ -214,6 +214,6 @@ int init_db(int buf_num, int flag, int log_num, char* log_path, char* logmsg_pat
     buffer_manager.init_buf(buf_num);
     trx_manager.init();
     log_buf_manager.init(buf_num, log_path, logmsg_path);
-    log_buf_manager.recovery();
+    log_buf_manager.recovery(flag, log_num);
     return 0;
 }
