@@ -1,5 +1,6 @@
 # RDBMS-ITE2038
-ITE2038 - 데이터베이스시스템및응용 
+ITE2038 - 데이터베이스시스템및응용
+(Prof. Hyungsoo Jung)
 ---
 ## Score : A0
 * 참고만 하시길 바랍니다.
